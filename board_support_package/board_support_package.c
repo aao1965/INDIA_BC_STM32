@@ -11,6 +11,8 @@
 #include "rgb_led.h"
 #include "ds1621.h"
 #include "am1805.h"
+#include "terminal.h"
+#include "terminal_signals.h"
 
 // Global hardware test result variable
 uint32_t test_hardware_result = _B_TEST_HARDWARE_SUCCESS_;
@@ -37,6 +39,7 @@ uint32_t init_hardware(void) {
 	if (RGB_LED_Init(&led_main, &htim3, TIM_CHANNEL_1) != true) {
 		test_hardware_result |= _B_FAULT_RGB_;
 	}
+
 	// Initialize ds1621 temperature sensot
 	if (DS1621_Init(&hi2c1))
 		if (DS1621_CreateTask() == NULL) {
@@ -63,6 +66,12 @@ uint32_t init_hardware(void) {
 		AM1805_Test_EnableClkOut();
 	}
 
+
+	 // TERMINAL (eAssist) INITIALIZATION
+	if (!terminal_init()) {
+		test_hardware_result |= _B_FAULT_TERMINAL_;
+	}
+
 	return test_hardware_result;
 }
 
@@ -75,6 +84,16 @@ inline bool test_status_hardware(uint32_t module) {
 // Get current hardware status
 inline uint32_t get_status_hardware(void) {
     return test_hardware_result;
+}
+
+// Check if software reset occurred (call before HAL_Init)
+inline bool get_rcc_csr(void) {
+    return __HAL_RCC_GET_FLAG(RCC_FLAG_SFTRST);
+}
+
+// Perform system reset
+void bsp_system_reset(void) {
+    HAL_NVIC_SystemReset();
 }
 
 

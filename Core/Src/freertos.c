@@ -30,6 +30,7 @@
 #include "rgb_led.h"
 #include "ds1621.h"
 #include "am1805.h"
+#include "terminal.h"
 
 /* USER CODE END Includes */
 
@@ -152,9 +153,11 @@ void StartDefaultTask(void *argument)
 
     init_hardware();
 
+	if (test_status_hardware(_B_FAULT_TERMINAL_)) {
+		osThreadResume(TerminalTaskHandle);
+	}
 
     osThreadResume(LowLevelTaskHandle);
-    osThreadResume(TerminalTaskHandle);
 
     for (;;) {
 
@@ -192,7 +195,7 @@ void StartLowLevelTask(void *argument)
         }
     }
 
-    // 3. LED Color Logic
+   /* // 3. LED Color Logic
     LED_Color_t color;
     float tc = (t < 20.0f) ? 20.0f : (t > 50.0f ? 50.0f : t);
 
@@ -214,10 +217,8 @@ void StartLowLevelTask(void *argument)
         color.r = 50; // Visual warning: Oscillator fallback active
     }
 
-    RGB_LED_SetColor(&led_main, color);
-
-
-    osDelay(500);
+    RGB_LED_SetColor(&led_main, color);*/
+    osDelay(1000);
 
   }
   /* USER CODE END StartLowLevelTask */
@@ -234,9 +235,9 @@ void StartTerminalTask(void *argument) {
 	/* USER CODE BEGIN StartTerminalTask */
 	/* Infinite loop */
 	for (;;) {
-
+		terminal_task();
 		PIN_Toggle_S(&pin_tp1);
-		osDelay(10);
+
 	}
 	/* USER CODE END StartTerminalTask */
 }

@@ -26,12 +26,17 @@
 /**********************************************************
  * 	STM32 hardware modules
  */
-/* External variables */
+/* RGB led pwm timer */
 extern TIM_HandleTypeDef htim3;
 extern DMA_HandleTypeDef hdma_tim3_ch1_trig;
 
-// External I2C handle ds1621s+ and AM1805 rtc
+//  I2C handle ds1621s+ and AM1805 rtc
 extern I2C_HandleTypeDef hi2c1;
+
+// eAssist UART terminal
+extern	UART_HandleTypeDef 	huart1;
+extern	DMA_HandleTypeDef 	hdma_usart1_rx;
+extern	DMA_HandleTypeDef 	hdma_usart1_tx;
 
 /* ********************************************************
  * test	fault bits  */
@@ -42,6 +47,7 @@ extern I2C_HandleTypeDef hi2c1;
 #define		_B_FAULT_GPIO_				B3
 #define		_B_FAULT_FPGA_				B4
 #define		_B_FAULT_AM1805_			B5
+#define		_B_FAULT_TERMINAL_			B8
 
 
 
@@ -51,5 +57,7 @@ uint32_t 	init_hardware(void);
 bool 		test_status_hardware(uint32_t module);
 uint32_t 	get_status_hardware(void);
 
+bool		get_rcc_csr(void);
+void		bsp_system_reset(void);
 
 #endif /* BOARD_SUPPORT_PACKAGE_H_ */

@@ -13,7 +13,7 @@
 
 /* --- Configuration Macros --- */
 #define AM1805_ADDR             (0x69 << 1)
-#define RTC_CAL_TEMP_THRESHOLD    2.0f    /* Temp delta to trigger calibration */
+#define RTC_CAL_TEMP_THRESHOLD    5.0f    /* Temp delta to trigger calibration */
 #define RTC_MIN_VALID_TEMP       -50.0f   /* Sensor sanity check */
 
 /* --- Register Map --- */
