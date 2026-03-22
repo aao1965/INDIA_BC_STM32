@@ -162,7 +162,8 @@ void StartDefaultTask(void *argument)
     for (;;) {
 
 		if (AM1805_GetTime(&current_time) == AM1805_OK) {
-			AM1805_FormatTime(time_str, sizeof(time_str), &current_time);
+			//AM1805_FormatTime(time_str, sizeof(time_str), &current_time);
+			AM1805_FormatFullDateTime(time_str, sizeof(time_str), &current_time);
 		}
 
 		PIN_Toggle_S(&pin_tp0);

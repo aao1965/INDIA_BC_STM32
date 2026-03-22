@@ -10,6 +10,7 @@
 
 //	test hardware
 extern	uint32_t	test_hardware_result;
+extern 	char time_str[];
 
 // RGB leds
 extern LED_Handler_t led_main;

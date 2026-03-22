@@ -51,7 +51,7 @@ AM1805_Status AM1805_GetTime(AM1805_Time_t *time) {
     return AM1805_ERROR;
 }
 
-AM1805_Status AM1805_SetTime(AM1805_Time_t *time) {
+/*AM1805_Status AM1805_SetTime(AM1805_Time_t *time) {
     uint8_t raw[7];
     raw[0] = bin2bcd(time->hundredths);
     raw[1] = bin2bcd(time->seconds);
@@ -61,6 +61,47 @@ AM1805_Status AM1805_SetTime(AM1805_Time_t *time) {
     raw[5] = bin2bcd(time->month);
     raw[6] = bin2bcd(time->year % 100);
     return HAL_I2C_Mem_Write(p_hi2c, AM1805_ADDR, AM1805_REG_HUNDREDTHS, 1, raw, 7, 100) == HAL_OK ? AM1805_OK : AM1805_ERROR;
+}*/
+
+AM1805_Status AM1805_SetTime(AM1805_Time_t *time) {
+    uint8_t raw[7];
+    uint8_t data;
+
+    /* 1. Unlock configuration registers with the Magic Key */
+    data = 0x9D;
+    if (HAL_I2C_Mem_Write(p_hi2c, AM1805_ADDR, AM1805_REG_KEY, 1, &data, 1, 100) != HAL_OK) {
+        return AM1805_ERROR;
+    }
+
+    /* 2. Enable Writing to RTC registers (Set WRTC bit in Control1) */
+    /* We read current CTRL1, set bit 0, and write it back */
+    if (HAL_I2C_Mem_Read(p_hi2c, AM1805_ADDR, AM1805_REG_CTRL1, 1, &data, 1, 100) != HAL_OK) {
+        return AM1805_ERROR;
+    }
+    data |= 0x01; /* Set WRTC bit */
+    if (HAL_I2C_Mem_Write(p_hi2c, AM1805_ADDR, AM1805_REG_CTRL1, 1, &data, 1, 100) != HAL_OK) {
+        return AM1805_ERROR;
+    }
+
+    /* 3. Prepare BCD data for time registers */
+    raw[0] = bin2bcd(time->hundredths);
+    raw[1] = bin2bcd(time->seconds);
+    raw[2] = bin2bcd(time->minutes);
+    raw[3] = bin2bcd(time->hours);
+    raw[4] = bin2bcd(time->day);
+    raw[5] = bin2bcd(time->month);
+    raw[6] = bin2bcd(time->year % 100);
+
+    /* 4. Write the time data */
+    if (HAL_I2C_Mem_Write(p_hi2c, AM1805_ADDR, AM1805_REG_HUNDREDTHS, 1, raw, 7, 100) != HAL_OK) {
+        return AM1805_ERROR;
+    }
+
+    /* 5. Optional: Disable WRTC bit to protect against accidental writes */
+    data &= ~0x01;
+    HAL_I2C_Mem_Write(p_hi2c, AM1805_ADDR, AM1805_REG_CTRL1, 1, &data, 1, 100);
+
+    return AM1805_OK;
 }
 
 AM1805_Status AM1805_AutoCalibrate(float temp) {
@@ -118,4 +159,22 @@ void AM1805_FormatTime(char* buf, uint16_t len, AM1805_Time_t* time) {
              time->minutes,
              time->seconds,
              time->is_xt_active ? "XT" : "RC");
+}
+
+
+/**
+ * @brief Formats full date and time into the provided buffer.
+ * @encoding UTF-8
+ */
+void AM1805_FormatFullDateTime(char* buf, uint16_t len, AM1805_Time_t* time) {
+    if (buf == NULL || time == NULL || len < 20) return;
+
+    /* Format: 2026-03-22 17:45:30 */
+    snprintf(buf, len, "%04d-%02d-%02d %02d:%02d:%02d",
+             time->year,
+             time->month,
+             time->day,
+             time->hours,
+             time->minutes,
+             time->seconds);
 }

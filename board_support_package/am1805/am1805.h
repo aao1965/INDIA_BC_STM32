@@ -72,4 +72,6 @@ AM1805_Status AM1805_Test_EnableClkOut(void);
 
 void AM1805_FormatTime(char* buf, uint16_t len, AM1805_Time_t* time);
 
+void AM1805_FormatFullDateTime(char* buf, uint16_t len, AM1805_Time_t* time);
+
 #endif /* AM1805_H */
