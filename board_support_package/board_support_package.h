@@ -39,7 +39,10 @@ extern I2C_HandleTypeDef hi2c1;
 #define		_B_FAULT_OS_				B0
 #define		_B_FAULT_RGB_				B1
 #define		_B_FAULT_DS1621_			B2
+#define		_B_FAULT_GPIO_				B3
+#define		_B_FAULT_FPGA_				B4
 #define		_B_FAULT_AM1805_			B5
+
 
 
 

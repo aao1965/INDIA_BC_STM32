@@ -7,6 +7,7 @@
 
 
 #include "board_support_package.h"
+#include "pin_mgmt.h"
 #include "rgb_led.h"
 #include "ds1621.h"
 #include "am1805.h"
@@ -20,6 +21,17 @@ LED_Handler_t led_main;
 
 // Initialize all hardware components
 uint32_t init_hardware(void) {
+
+	// Initialize GPIO
+	if (PIN_Mgmt_Init()!=osOK){
+		test_hardware_result |= _B_FAULT_GPIO_;
+	}else{
+		SPI_Bus_Release_To_FPGA();
+		if (FPGA_System_Restart(4000)!= osOK){
+			PIN_Reset(&pin_reset_xs6);
+			test_hardware_result |= _B_FAULT_FPGA_;
+		}
+	}
 
 	// Initialize RGB LED
 	if (RGB_LED_Init(&led_main, &htim3, TIM_CHANNEL_1) != true) {
@@ -55,12 +67,15 @@ uint32_t init_hardware(void) {
 }
 
 
-/*
-int _write(int file, char *ptr, int len) {
-    int i;
-    for (i = 0; i < len; i++) {
-        ITM_SendChar((*ptr++));
-    }
-    return len;
+// Test if specific hardware module is functional
+inline bool test_status_hardware(uint32_t module) {
+    return !(get_status_hardware() & module);
 }
-*/
+
+// Get current hardware status
+inline uint32_t get_status_hardware(void) {
+    return test_hardware_result;
+}
+
+
+

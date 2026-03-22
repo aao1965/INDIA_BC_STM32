@@ -26,6 +26,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "board_support_package.h"
+#include "pin_mgmt.h"
 #include "rgb_led.h"
 #include "ds1621.h"
 #include "am1805.h"
@@ -64,7 +65,14 @@ osThreadId_t LowLevelTaskHandle;
 const osThreadAttr_t LowLevelTask_attributes = {
   .name = "LowLevelTask",
   .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityLow1,
+};
+/* Definitions for TerminalTask */
+osThreadId_t TerminalTaskHandle;
+const osThreadAttr_t TerminalTask_attributes = {
+  .name = "TerminalTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityLow7,
 };
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,6 +82,7 @@ const osThreadAttr_t LowLevelTask_attributes = {
 
 void StartDefaultTask(void *argument);
 void StartLowLevelTask(void *argument);
+void StartTerminalTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -110,6 +119,9 @@ void MX_FREERTOS_Init(void) {
   /* creation of LowLevelTask */
   LowLevelTaskHandle = osThreadNew(StartLowLevelTask, NULL, &LowLevelTask_attributes);
 
+  /* creation of TerminalTask */
+  TerminalTaskHandle = osThreadNew(StartTerminalTask, NULL, &TerminalTask_attributes);
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -134,19 +146,23 @@ char time_str[32];          // Буфер для строки "HH:MM:SS [XT]"
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
-    HAL_GPIO_WritePin(SEL_MEM_STM32_GPIO_Port, SEL_MEM_STM32_Pin, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(RESET_XS6_GPIO_Port, RESET_XS6_Pin, GPIO_PIN_RESET);
-    osDelay(4);
-    HAL_GPIO_WritePin(RESET_XS6_GPIO_Port, RESET_XS6_Pin, GPIO_PIN_SET);
+
+	osThreadSuspend(LowLevelTaskHandle);
+	osThreadSuspend(TerminalTaskHandle);
 
     init_hardware();
+
+
+    osThreadResume(LowLevelTaskHandle);
+    osThreadResume(TerminalTaskHandle);
 
     for (;;) {
 
 		if (AM1805_GetTime(&current_time) == AM1805_OK) {
 			AM1805_FormatTime(time_str, sizeof(time_str), &current_time);
 		}
-        HAL_GPIO_TogglePin(TP0_GPIO_Port, TP0_Pin);
+
+		PIN_Toggle_S(&pin_tp0);
         osDelay(100);
     }
   /* USER CODE END StartDefaultTask */
@@ -156,11 +172,6 @@ void StartDefaultTask(void *argument)
 float current_temp;
 uint8_t rtc_is_crystal;
 /* USER CODE END Header_StartLowLevelTask */
-
-/**
- * @brief Task for thermal compensation and LED feedback.
- * @encoding UTF-8
- */
 void StartLowLevelTask(void *argument)
 {
   /* USER CODE BEGIN StartLowLevelTask */
@@ -205,9 +216,29 @@ void StartLowLevelTask(void *argument)
 
     RGB_LED_SetColor(&led_main, color);
 
+
     osDelay(500);
+
   }
   /* USER CODE END StartLowLevelTask */
+}
+
+/* USER CODE BEGIN Header_StartTerminalTask */
+/**
+* @brief Function implementing the TerminalTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartTerminalTask */
+void StartTerminalTask(void *argument) {
+	/* USER CODE BEGIN StartTerminalTask */
+	/* Infinite loop */
+	for (;;) {
+
+		PIN_Toggle_S(&pin_tp1);
+		osDelay(10);
+	}
+	/* USER CODE END StartTerminalTask */
 }
 
 /* Private application code --------------------------------------------------*/
