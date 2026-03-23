@@ -140,8 +140,7 @@ void MX_FREERTOS_Init(void) {
   * @retval None
   */
 
-AM1805_Time_t current_time;
-char time_str[32];          // Буфер для строки "HH:MM:SS [XT]"
+
 
 /* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void *argument)
@@ -161,10 +160,7 @@ void StartDefaultTask(void *argument)
 
     for (;;) {
 
-		if (AM1805_GetTime(&current_time) == AM1805_OK) {
-			//AM1805_FormatTime(time_str, sizeof(time_str), &current_time);
-			AM1805_FormatFullDateTime(time_str, sizeof(time_str), &current_time);
-		}
+
 
 		PIN_Toggle_S(&pin_tp0);
         osDelay(100);
@@ -172,58 +168,74 @@ void StartDefaultTask(void *argument)
   /* USER CODE END StartDefaultTask */
 }
 
+
 /* USER CODE BEGIN Header_StartLowLevelTask */
 float current_temp;
-uint8_t rtc_is_crystal;
+AM1805_Time_t current_time;
+char time_str[32];          // Буфер для строки "HH:MM:SS [XT]"
 /* USER CODE END Header_StartLowLevelTask */
-void StartLowLevelTask(void *argument)
-{
-  /* USER CODE BEGIN StartLowLevelTask */
-  float last_cal_temp = -999.0f;
-  AM1805_Time_t rtc_status;
 
-  for (;;) {
-    // 1. Get current data
-    float t = DS1621_GetLastTemperature();
-    current_temp= t;
+void StartLowLevelTask(void *argument) {
+    /* USER CODE BEGIN StartLowLevelTask */
+    float t;
+    float last_cal_temp = -999.0f;
+    uint8_t sensor_retry_count = 0;
+    const uint8_t MAX_SENSOR_RETRIES = 5;
 
-    AM1805_GetTime(&rtc_status); // Updates time and rtc_status.is_xt_active
+    // 1. SMART WAIT for the first valid sensor reading
+    // Try to get real temperature, but don't hang forever if the sensor is dead.
+    while (sensor_retry_count < MAX_SENSOR_RETRIES) {
+        last_cal_temp = DS1621_GetLastTemperature();
 
-    // 2. Dynamic Autocalibration (XT parabolic or RC linear)
-    if (t > RTC_MIN_VALID_TEMP && fabsf(t - last_cal_temp) > RTC_CAL_TEMP_THRESHOLD) {
-        if (AM1805_AutoCalibrate(t) == AM1805_OK) {
-            last_cal_temp = t;
+        if (last_cal_temp > RTC_MIN_VALID_TEMP) {
+            break; // Sensor is alive and healthy!
         }
+
+        sensor_retry_count++;
+        osDelay(200); // Give it some time to wake up
     }
 
-   /* // 3. LED Color Logic
-    LED_Color_t color;
-    float tc = (t < 20.0f) ? 20.0f : (t > 50.0f ? 50.0f : t);
-
-    if (tc < 35.0f) {
-        float ratio = (tc - 20.0f) / 15.0f;
-        color.r = 0;
-        color.g = (uint8_t)(40 * ratio);
-        color.b = (uint8_t)(40 * (1.0f - ratio));
-    } else {
-        float ratio = (tc - 35.0f) / 15.0f;
-        color.r = (uint8_t)(40 * ratio);
-        color.g = (uint8_t)(40 * (1.0f - ratio));
-        color.b = 0;
-    }
-    color.w = 0;
-
-    // OPTIONAL: If running on RC (Crystal failed), add a Red blink or tint
-    if (!rtc_status.is_xt_active) {
-        color.r = 50; // Visual warning: Oscillator fallback active
+    // 2. FALLBACK logic if sensor is dead
+    if (sensor_retry_count >= MAX_SENSOR_RETRIES) {
+        last_cal_temp = 25.0f; // Use default room temp if sensor failed
+        // Optional: Log error or set a "Sensor Error" flag for the UI
     }
 
-    RGB_LED_SetColor(&led_main, color);*/
-    osDelay(1000);
+    // 3. Initial calibration
+    AM1805_AutoCalibrate(last_cal_temp);
 
-  }
-  /* USER CODE END StartLowLevelTask */
+    for (;;) {
+        // 4. Update current temperature
+        t = DS1621_GetLastTemperature();
+
+        // Update global variable only if reading is valid
+        if (t > RTC_MIN_VALID_TEMP) {
+            current_temp = t;
+
+            // 5. Dynamic Autocalibration logic
+            if (fabsf(t - last_cal_temp) > RTC_CAL_TEMP_THRESHOLD) {
+                if (AM1805_AutoCalibrate(t) == AM1805_OK) {
+                    last_cal_temp = t;
+                }
+            }
+        }
+
+        // 6. Update Time and Format string
+        if (AM1805_GetTime(&current_time) == AM1805_OK) {
+            AM1805_FormatFullDateTime(time_str, sizeof(time_str), &current_time);
+        }
+
+        osDelay(500);
+    }
+    /* USER CODE END StartLowLevelTask */
 }
+
+
+
+
+
+
+
 
 /* USER CODE BEGIN Header_StartTerminalTask */
 /**

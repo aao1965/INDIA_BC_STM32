@@ -34,6 +34,7 @@ SIGNALS_BEGIN(DSPA_SIGNALS_NAME)
 		_U32_R_	("Test hardware",	test_hardware_result,&sDEV),
 		_STRING_R_ ("Data ", sTIME, &sDEV),
 			_STRING_R_ ("current data ", time_str, &sTIME),
+			_BOOL_R_("XT_osc present",set_time.is_xt_active, &sTIME),
 			_BYTE_RW_("hours", set_time.hours, &sTIME),
 			_BYTE_RW_("minutes", set_time.minutes, &sTIME),
 			_BYTE_RW_("seconds", set_time.seconds, &sTIME),

@@ -40,30 +40,35 @@ uint32_t init_hardware(void) {
 		test_hardware_result |= _B_FAULT_RGB_;
 	}
 
-	// Initialize ds1621 temperature sensot
-	if (DS1621_Init(&hi2c1))
+	// 1. Initialize DS1621 first
+	if (DS1621_Init(&hi2c1)) {
 		if (DS1621_CreateTask() == NULL) {
 			test_hardware_result |= _B_FAULT_DS1621_;
 		}
-	/* --- Inside init_hardware() --- */
 
-	// 1. Initialize RTC Hardware
-	if (AM1805_Init(&hi2c1) == false) {
-		test_hardware_result |= _B_FAULT_AM1805_;
-	} else {
-		AM1805_Time_t now;
+		osMutexId_t shared_i2c_mutex = DS1621_GetI2CMutex();
 
-		// 2. GetTime now automatically fills now.is_xt_active
-		if (AM1805_GetTime(&now) == AM1805_OK) {
-			// If RTC was reset (battery failure), sync with build time
-			if (now.year <= 2000) {
-				AM1805_Time_t build = AM1805_ParseBuildTime(__DATE__, __TIME__);
-				AM1805_SetTime(&build);
+		// 2. AM1805_Init already enables CLKOUT if AM1805_ENABLE_CLKOUT is defined
+		if (AM1805_Init_Smart(&hi2c1, shared_i2c_mutex)) {
+			AM1805_Time_t now;
+
+			// 3. Read time to check if RTC is valid
+			if (AM1805_GetTime(&now) == AM1805_OK) {
+				if (now.year <= 2000) {
+					AM1805_Time_t build = AM1805_ParseBuildTime(__DATE__,
+							__TIME__);
+					AM1805_SetTime(&build);
+				}
 			}
-		}
+			// AM1805_Test_EnableClkOut(); // <-- REMOVE THIS, it's already done in Init
 
-		// 3. Enable 32kHz output for hardware verification (Pin 8)
-		AM1805_Test_EnableClkOut();
+		} else {
+			test_hardware_result |= _B_FAULT_AM1805_;
+		}
+	} else {
+		test_hardware_result |= _B_FAULT_DS1621_;
+		// Try to init RTC anyway (CLKOUT will still start if defined)
+		AM1805_Init(&hi2c1, NULL);
 	}
 
 
