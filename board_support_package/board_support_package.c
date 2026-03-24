@@ -41,36 +41,43 @@ uint32_t init_hardware(void) {
 	}
 
 	// 1. Initialize DS1621 first
-	if (DS1621_Init(&hi2c1)) {
-		if (DS1621_CreateTask() == NULL) {
-			test_hardware_result |= _B_FAULT_DS1621_;
-		}
-
-		osMutexId_t shared_i2c_mutex = DS1621_GetI2CMutex();
-
-		// 2. AM1805_Init already enables CLKOUT if AM1805_ENABLE_CLKOUT is defined
-		if (AM1805_Init_Smart(&hi2c1, shared_i2c_mutex)) {
-			AM1805_Time_t now;
-
-			// 3. Read time to check if RTC is valid
-			if (AM1805_GetTime(&now) == AM1805_OK) {
-				if (now.year <= 2000) {
-					AM1805_Time_t build = AM1805_ParseBuildTime(__DATE__,
-							__TIME__);
-					AM1805_SetTime(&build);
-				}
+		if (DS1621_Init(&hi2c1)) {
+			if (DS1621_CreateTask() == NULL) {
+				test_hardware_result |= _B_FAULT_DS1621_;
 			}
-			// AM1805_Test_EnableClkOut(); // <-- REMOVE THIS, it's already done in Init
 
+			osMutexId_t shared_i2c_mutex = DS1621_GetI2CMutex();
+
+			// 2. AM1805_Init_Smart enables XT and CLKOUT if defined
+			if (AM1805_Init_Smart(&hi2c1, shared_i2c_mutex)) {
+
+				// --- Diagnostic Block ---
+				AM1805_Diag_t rtc_diag;
+				if (AM1805_ReadDiagnostic(&rtc_diag) == AM1805_OK) {
+					// Place breakpoint here to inspect rtc_diag in Watch window
+					// Check rtc_diag.ostat: 0x00 means XT is active, 0x10 means RC fallback
+					(void)rtc_diag;
+				}
+				// ------------------------
+
+				AM1805_Time_t now;
+
+				// 3. Read time to check if RTC is valid
+				if (AM1805_GetTime(&now) == AM1805_OK) {
+					if (now.year <= 2000) {
+						AM1805_Time_t build = AM1805_ParseBuildTime(__DATE__, __TIME__);
+						AM1805_SetTime(&build);
+					}
+				}
+
+			} else {
+				test_hardware_result |= _B_FAULT_AM1805_;
+			}
 		} else {
-			test_hardware_result |= _B_FAULT_AM1805_;
+			test_hardware_result |= _B_FAULT_DS1621_;
+			// Try to init RTC anyway (CLKOUT will still start if defined)
+			AM1805_Init_Smart(&hi2c1, NULL);
 		}
-	} else {
-		test_hardware_result |= _B_FAULT_DS1621_;
-		// Try to init RTC anyway (CLKOUT will still start if defined)
-		AM1805_Init(&hi2c1, NULL);
-	}
-
 
 	 // TERMINAL (eAssist) INITIALIZATION
 	if (!terminal_init()) {
