@@ -176,58 +176,19 @@ char time_str[32];          // Буфер для строки "HH:MM:SS [XT]"
 /* USER CODE END Header_StartLowLevelTask */
 
 void StartLowLevelTask(void *argument) {
-    /* USER CODE BEGIN StartLowLevelTask */
-    float t;
-    float last_cal_temp = -999.0f;
-    uint8_t sensor_retry_count = 0;
-    const uint8_t MAX_SENSOR_RETRIES = 5;
+	/* USER CODE BEGIN StartLowLevelTask */
 
-    // 1. SMART WAIT for the first valid sensor reading
-    // Try to get real temperature, but don't hang forever if the sensor is dead.
-    while (sensor_retry_count < MAX_SENSOR_RETRIES) {
-        last_cal_temp = DS1621_GetLastTemperature();
+	for (;;) {
+		// 4. Update current temperature
+		current_temp = DS1621_GetLastTemperature();
 
-        if (last_cal_temp > RTC_MIN_VALID_TEMP) {
-            break; // Sensor is alive and healthy!
-        }
+		if (AM1805_GetTime(&current_time) == AM1805_OK) {
+			AM1805_FormatFullDateTime(time_str, sizeof(time_str),	&current_time);
+		}
 
-        sensor_retry_count++;
-        osDelay(200); // Give it some time to wake up
-    }
-
-    // 2. FALLBACK logic if sensor is dead
-    if (sensor_retry_count >= MAX_SENSOR_RETRIES) {
-        last_cal_temp = 25.0f; // Use default room temp if sensor failed
-        // Optional: Log error or set a "Sensor Error" flag for the UI
-    }
-
-    // 3. Initial calibration
-    AM1805_AutoCalibrate(last_cal_temp);
-
-    for (;;) {
-        // 4. Update current temperature
-        t = DS1621_GetLastTemperature();
-
-        // Update global variable only if reading is valid
-        if (t > RTC_MIN_VALID_TEMP) {
-            current_temp = t;
-
-            // 5. Dynamic Autocalibration logic
-            if (fabsf(t - last_cal_temp) > RTC_CAL_TEMP_THRESHOLD) {
-                if (AM1805_AutoCalibrate(t) == AM1805_OK) {
-                    last_cal_temp = t;
-                }
-            }
-        }
-
-        // 6. Update Time and Format string
-        if (AM1805_GetTime(&current_time) == AM1805_OK) {
-            AM1805_FormatFullDateTime(time_str, sizeof(time_str), &current_time);
-        }
-
-        osDelay(500);
-    }
-    /* USER CODE END StartLowLevelTask */
+		osDelay(500);
+	}
+	/* USER CODE END StartLowLevelTask */
 }
 
 

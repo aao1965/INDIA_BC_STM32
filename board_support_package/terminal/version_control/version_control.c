@@ -4,11 +4,11 @@
 
 // Product information strings
 const char _VC_PRODUCT_NUMBER_[] =      "Ballistic computer board\n";
-const char _VC_BOARD_NUMBER_[] =        "Board:  xxxx.xx.xx.xxx\n";
+const char _VC_BOARD_NUMBER_[] =        "Board:  7111.00.00.000\n";
 const char _VC_CHIP_DESIGNATION_[] =    "Chip: DD11 ";
 const char _VC_SOFT_NAME_[] =           "STM32F415ZGT6\n";
 const char _VC_SOFT_NOTE_[] =           "SW:  produced by mr. Andrew Auramenka \n";
-const char _VC_SOFT_VERSION_[] =        "Ver. 1.0";
+const char _VC_SOFT_VERSION_[] =        "Ver. 1.2";
 
 // Build timestamp (compilation date and time)
 static const char* build = __DATE__"  "__TIME__"\n";
