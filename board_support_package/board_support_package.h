@@ -51,7 +51,6 @@ extern	DMA_HandleTypeDef 	hdma_usart1_tx;
 
 
 
-
 /*	global functions */
 uint32_t 	init_hardware(void);
 bool 		test_status_hardware(uint32_t module);
