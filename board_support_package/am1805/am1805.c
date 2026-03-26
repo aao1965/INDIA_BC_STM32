@@ -30,47 +30,72 @@ static AM1805_Status i2c_transfer(uint8_t reg, uint8_t *pData, uint16_t size, bo
 }
 
 /**
- * @brief Инициализация RTC с защитой от медленного падения напряжения (3 сек).
+ * @brief Инициализация RTC AM1805AQ (Smart версия 1.2)
+ * Настроено под: Кварц 7pF, Батарея 2.89V, медленное падение VCC (3 сек).
+ * Кодировка: UTF-8.
  */
 bool AM1805_Init_Smart(I2C_HandleTypeDef *hi2c_ptr, osMutexId_t mutex_id) {
     p_hi2c = hi2c_ptr;
     i2c_mutex = mutex_id;
     uint8_t data, key;
 
-    // Проверка наличия устройства на шине
-    if (HAL_I2C_IsDeviceReady(p_hi2c, AM1805_ADDR, 5, 100) != HAL_OK) return false;
+    // 0. Проверка физического отклика чипа по адресу 0x69
+    if (HAL_I2C_IsDeviceReady(p_hi2c, AM1805_ADDR, 5, 100) != HAL_OK) {
+        return false;
+    }
 
-    // 1. Настройка осциллятора + PWGT (Защита I/O при медленном падении питания)
-    key = AM1805_KEY_OSC;
+    // 1. Настройка осциллятора (XT) и защиты ввода-вывода (PWGT)
+    // ВАЖНО: Устанавливаем OUT = 01 (6pF) для кварца 7pF (ABS06)
+    key = AM1805_KEY_OSC; // 0xA1
     i2c_transfer(AM1805_REG_KEY, &key, 1, false);
-    data = 0x04; // OSEL=0 (XT), PWGT=1 (Аппаратная блокировка I/O шины)
-    i2c_transfer(AM1805_REG_OSC_CTRL, &data, 1, false);
+	/*
+	 Биты регистра 0x1C:
+	 OSEL (7) = 0 (Внешний кварц XT)
+	 PWGT (2) = 1 (Аппаратная защита I/O)
+	 OUT (1:0) = 00 (Нагрузочная емкость 12.5 pF)
+	 Дает стабильный ход, но замедляет на -222 ppm. Исправим это калибровкой.
+	 */
+	data = 0x04; // Возвращаем 12.5 pF
+	i2c_transfer(AM1805_REG_OSC_CTRL, &data, 1, false);
 
-    // 2. Настройка питания: порог BREF = 1011 (Fall 2.1V / Rise 2.5V)
-    key = AM1805_KEY_CONF;
+    // 2. Настройка порога переключения на батарею (BREF)
+    key = AM1805_KEY_CONF; // 0x9D
     i2c_transfer(AM1805_REG_KEY, &key, 1, false);
-    data = (0x0B << 4); 
+    /* 1011 (0x0B) -> Fall 2.1V / Rise 2.5V (Идеально для батарейки 2.89V) */
+    data = (0x0B << 4);
     i2c_transfer(AM1805_REG_BREF, &data, 1, false);
 
-    // 3. Изоляция I2C шины при переходе на батарею (IOBM = 0)
-    // Ключ пишем снова, т.к. он сбрасывается после каждой записи в защищенную область
-    key = AM1805_KEY_CONF;
+    // 3. Изоляция I2C шины при работе от батареи (IOBM)
+    // Ключ пишем снова, так как он сбрасывается после каждой записи!
+    key = AM1805_KEY_CONF; // 0x9D
     i2c_transfer(AM1805_REG_KEY, &key, 1, false);
-    data = 0x00; // IOBM = 0: полностью отключает I2C при питании от VBAT
+    /* IOBM = 0: полностью отключает I2C на VBAT (защита от мусора при падении VCC 3 сек) */
+    data = 0x00;
     i2c_transfer(AM1805_REG_BATMODE_IO, &data, 1, false);
 
-    // 4. Включение Power Switch (PWR2) и разрешения записи (WRTC)
-    data = 0x03; 
+    // 4. Включение Battery Switch (PWR2) и разрешения записи времени (WRTC)
+    /* 0x03 -> PWR2=1, WRTC=1 */
+    data = 0x03;
     i2c_transfer(AM1805_REG_CTRL1, &data, 1, false);
 
-    // 5. Очистка флага Oscillator Failure (OF) после старта
-    i2c_transfer(AM1805_REG_STATUS, &data, 1, true);
-    data &= ~0x02; // Сброс бита OF
-    i2c_transfer(AM1805_REG_STATUS, &data, 1, false);
+    // 5. Очистка флага Oscillator Failure (OF) в регистре 0x1D
+    // Это сбросит вашу прошлую ошибку "osc_status = 34"
+    key = AM1805_KEY_OSC; // 0xA1
+    i2c_transfer(AM1805_REG_KEY, &key, 1, false);
+    /* Сбрасываем биты OF (1) и ACF (0). OMODE(4) и LKO2(5) не изменятся. */
+    data = 0x00;
+    i2c_transfer(AM1805_REG_OSC_STAT, &data, 1, false);
+
+    // Финальная проверка: не вернулся ли флаг ошибки OF мгновенно?
+    uint8_t check_stat = 0;
+    i2c_transfer(AM1805_REG_OSC_STAT, &check_stat, 1, true);
+    if (check_stat & 0x02) {
+        // Если OF опять = 1, значит кварц всё еще не заводится стабильно
+        return false;
+    }
 
     return true;
 }
-
 /**
  * @brief Получение текущего времени. Проверяет, активен ли кварц.
  */
@@ -113,7 +138,7 @@ AM1805_Status AM1805_SetTime(AM1805_Time_t *time) {
  * @brief Точная цифровая калибровка. 1 шаг = 1.907 ppm.
  * @param adj_ppm Положительное значение ускоряет, отрицательное замедляет.
  */
-AM1805_Status AM1805_SetCalibration(float adj_ppm) {
+/*AM1805_Status AM1805_SetCalibration(float adj_ppm) {
     int8_t steps = (int8_t)(adj_ppm / 1.907f);
     if (steps > 63)  steps = 63;
     if (steps < -64) steps = -64;
@@ -121,6 +146,24 @@ AM1805_Status AM1805_SetCalibration(float adj_ppm) {
     uint8_t reg_val = (uint8_t)(steps & 0x7F); 
     uint8_t key = AM1805_KEY_CONF;
     
+    i2c_transfer(AM1805_REG_KEY, &key, 1, false);
+    return i2c_transfer(AM1805_REG_CAL_XT, &reg_val, 1, false);
+}*/
+AM1805_Status AM1805_SetCalibration(float adj_ppm) {
+    uint8_t reg_val;
+    // Режим Coarse (грубый) для коррекции > 120 ppm
+    if (adj_ppm > 120.0f || adj_ppm < -120.0f) {
+        int8_t steps = (int8_t)(adj_ppm / 3.814f);
+        if (steps > 63) steps = 63;
+        if (steps < -64) steps = -64;
+        reg_val = (uint8_t)(steps & 0x7F) | 0x80; // Включаем Bit 7 (CMDX)
+    } else {
+        int8_t steps = (int8_t)(adj_ppm / 1.907f);
+        if (steps > 63) steps = 63;
+        if (steps < -64) steps = -64;
+        reg_val = (uint8_t)(steps & 0x7F); // Обычный режим
+    }
+    uint8_t key = AM1805_KEY_CONF; // 0x9D
     i2c_transfer(AM1805_REG_KEY, &key, 1, false);
     return i2c_transfer(AM1805_REG_CAL_XT, &reg_val, 1, false);
 }
@@ -139,15 +182,16 @@ void AM1805_FormatFullDateTime(char* buf, uint16_t len, AM1805_Time_t* time) {
 /**
  * @brief Чтение диагностических регистров.
  */
+
 AM1805_Status AM1805_ReadDiagnostic(AM1805_Diag_t *diag) {
     i2c_transfer(AM1805_REG_CAL_XT,    &diag->cal_xt,   1, true);
     i2c_transfer(AM1805_REG_OSC_CTRL,  &diag->osc_ctrl, 1, true);
     i2c_transfer(AM1805_REG_BREF,      &diag->bref,     1, true);
     i2c_transfer(AM1805_REG_STATUS,    &diag->status,   1, true);
     i2c_transfer(AM1805_REG_CTRL1,     &diag->ctrl1,    1, true);
+    i2c_transfer(AM1805_REG_OSC_STAT,  &diag->osc_stat, 1, true); // Добавили чтение 0x1D
     return AM1805_OK;
 }
-
 /**
  * @brief Парсинг времени макросов компиляции __DATE__ и __TIME__.
  */

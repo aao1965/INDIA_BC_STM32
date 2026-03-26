@@ -20,6 +20,7 @@ uint32_t test_hardware_result = _B_TEST_HARDWARE_SUCCESS_;
 
 /* LED handle */
 LED_Handler_t led_main;
+AM1805_Diag_t rtc_diag;
 
 // Initialize all hardware components
 uint32_t init_hardware(void) {
@@ -52,7 +53,7 @@ uint32_t init_hardware(void) {
 			if (AM1805_Init_Smart(&hi2c1, shared_i2c_mutex)) {
 
 				// --- Diagnostic Block ---
-				AM1805_Diag_t rtc_diag;
+
 				if (AM1805_ReadDiagnostic(&rtc_diag) == AM1805_OK) {
 					// Place breakpoint here to inspect rtc_diag in Watch window
 					// Check rtc_diag.ostat: 0x00 means XT is active, 0x10 means RC fallback

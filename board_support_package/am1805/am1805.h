@@ -48,8 +48,13 @@ typedef struct {
     bool is_xt_active; /* true = работает от кварца, false = от RC */
 } AM1805_Time_t;
 
+/*
 typedef struct {
     uint8_t cal_xt, osc_ctrl, bref, status, ctrl1;
+} AM1805_Diag_t;
+*/
+typedef struct {
+    uint8_t cal_xt, osc_ctrl, bref, status, ctrl1, osc_stat; // добавили osc_stat
 } AM1805_Diag_t;
 
 /* --- API функции --- */
