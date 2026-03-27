@@ -13,6 +13,7 @@
 #include 	"am1805.h"
 
 static	char *sDEV = "";
+static	char *sFLASH = "";
 static  char *sDEBUG = "";
 static 	char *sTIME = "";
 static  char *sTIME_CORRECTION = "";
@@ -35,6 +36,12 @@ static	bool	run_set_correction=	false;
 SIGNALS_BEGIN(DSPA_SIGNALS_NAME)
 	_STRING_R_  ("Ballistic computer board", sDEV, NULL),
 		_U32_R_	("Test hardware",	test_hardware_result,&sDEV),
+		_STRING_R_("W25Q16JVSSIQ", sFLASH, &sDEV),
+			_BYTE_R_("JDECID0", DD15.manufacturer_id,&sFLASH),
+			_BYTE_R_("JDECID1", DD15.memory_type,&sFLASH),
+			_BYTE_R_("JDECID2", DD15.capacity_id,&sFLASH),
+			_U64_R_("DD2 UID", 	DD15.unique_id,&sFLASH),
+
 		_STRING_R_ ("Date + Time", sTIME, &sDEV),
 			_STRING_R_ ("current data ", time_str, &sTIME),
 			_BOOL_R_("XT_osc present",set_time.is_xt_active, &sTIME),
@@ -55,7 +62,8 @@ SIGNALS_BEGIN(DSPA_SIGNALS_NAME)
 				_BYTE_R_("OSC STATUS",  rtc_diag.osc_stat, &sTIME_CORRECTION),
 				_BYTE_R_("STATUS",  rtc_diag.status, &sTIME_CORRECTION),
 	_STRING_R_  ("Debug section", sDEBUG, NULL),
-		_FLOAT_R_("ds1621s+(°C) ", current_temp, &sDEBUG),
+		_FLOAT_R_("ds1621s+(°C) ", current_temp, &sDEBUG)
+
 SIGNALS_END(DSPA_SIGNALS_NAME)
 
 

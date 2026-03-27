@@ -2,12 +2,15 @@
 #ifndef TERMINAL_SIGNALS_H_
 #define TERMINAL_SIGNALS_H_
 
+#include "w25q16.h"
 #include "board_support_package.h"
 #include "rgb_led.h"
 #include "am1805.h"
 
 #define		DSPA_SIGNALS_NAME		dspa
 
+// flash w25q16
+extern	W25Q16_Handle_t 	DD15;
 
 //	test hardware
 extern	uint32_t	test_hardware_result;

@@ -57,6 +57,12 @@ osStatus_t FPGA_System_Restart(uint32_t timeout_ms) {
     return osErrorTimeout;
 }
 
+void	FPGA_Reset(void){
+	HAL_GPIO_WritePin(PMGT_RESET_PORT, PMGT_RESET_PIN, GPIO_PIN_RESET);
+	osDelay(2);
+	HAL_GPIO_WritePin(PMGT_RESET_PORT, PMGT_RESET_PIN, GPIO_PIN_SET);
+}
+
 /* --- THREAD-SAFE GPIO (_S) --- */
 
 void PIN_Set_S(const Pin_Descriptor_t* desc) {

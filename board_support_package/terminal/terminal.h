@@ -24,7 +24,7 @@
 
 //	memory identifiers
 #define		_ID_FPGA_FLASH			0x00
-#define		_ID_DEV_NUM				0	//1
+#define		_ID_DEV_NUM				1
 
 /*
  *		eAssist max = 1024 !!!!!

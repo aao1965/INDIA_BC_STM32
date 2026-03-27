@@ -71,5 +71,6 @@ uint8_t  PIN_Read_S(const Pin_Descriptor_t* desc);
 osStatus_t SPI_Bus_Acquire_For_STM32(void);
 osStatus_t SPI_Bus_Release_To_FPGA(void);
 osStatus_t FPGA_System_Restart(uint32_t timeout_ms);
+void	FPGA_Reset(void);
 
 #endif /* __PIN_MGMT_H */

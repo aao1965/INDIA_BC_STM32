@@ -6,9 +6,11 @@
  */
 
 
+#include <w25q16/w25q16.h>
 #include "board_support_package.h"
 #include "pin_mgmt.h"
 #include "rgb_led.h"
+#include "led_blink.h"
 #include "ds1621.h"
 #include "am1805.h"
 #include "terminal.h"
@@ -20,6 +22,7 @@ uint32_t test_hardware_result = _B_TEST_HARDWARE_SUCCESS_;
 
 /* LED handle */
 LED_Handler_t led_main;
+W25Q16_Handle_t DD15;	// FPGA external flash memory handle
 AM1805_Diag_t rtc_diag;
 
 // Initialize all hardware components
@@ -36,9 +39,28 @@ uint32_t init_hardware(void) {
 		}
 	}
 
+	// W25Q16 FLASH CONFIGURATION
+	// Configure after pins are initialized
+	if (test_status_hardware(_B_FAULT_GPIO_)) {
+		if (W25Q16_Init_With_PinMgmt(&DD15, &hspi1) != osOK) {
+			test_hardware_result |= _B_FAULT_W25Q16_;
+		} else {
+			SPI_Bus_Acquire_For_STM32();
+			// Read flash identification
+			W25Q16_ReadJEDECID(&DD15);
+			W25Q16_ReadUID(&DD15);
+			// Release SPI bus and FPGA reset
+			SPI_Bus_Release_To_FPGA();
+
+		}
+	}
+
+
 	// Initialize RGB LED
 	if (RGB_LED_Init(&led_main, &htim3, TIM_CHANNEL_1) != true) {
 		test_hardware_result |= _B_FAULT_RGB_;
+	}else{
+		led_blink_init(&led_main);
 	}
 
 	// 1. Initialize DS1621 first

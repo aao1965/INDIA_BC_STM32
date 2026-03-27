@@ -37,6 +37,7 @@ extern I2C_HandleTypeDef hi2c1;
 extern	UART_HandleTypeDef 	huart1;
 extern	DMA_HandleTypeDef 	hdma_usart1_rx;
 extern	DMA_HandleTypeDef 	hdma_usart1_tx;
+extern	SPI_HandleTypeDef 	hspi1;
 
 /* ********************************************************
  * test	fault bits  */
@@ -47,6 +48,7 @@ extern	DMA_HandleTypeDef 	hdma_usart1_tx;
 #define		_B_FAULT_GPIO_				B3
 #define		_B_FAULT_FPGA_				B4
 #define		_B_FAULT_AM1805_			B5
+#define		_B_FAULT_W25Q16_			B6
 #define		_B_FAULT_TERMINAL_			B8
 
 

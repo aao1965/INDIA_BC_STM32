@@ -7,9 +7,10 @@
 #include	"std_com.h"
 #include	"wrapper.h"
 #include 	"version_control.h"
-//#include 	"w25q128.h"
+#include 	"w25q16.h"
 #include 	"pin_mgmt.h"
 #include 	"rgb_led.h"
+#include 	"led_blink.h"
 #include	"terminal_signals.h"
 
 /* 	main terminal uart */
@@ -20,11 +21,11 @@ static	PROG_Config_t	PROG_Config;
 static	SYS_Config_t  	SYS_Config;
 
 static 	bool reset_request=	false;
-static 	bool fl_stay_here=		false;
 static 	int	handle;
 
-static	void led_blink(bool fl_stay_here);
 static	char* uint32_to_string(uint32_t n, char* buffer, size_t buffer_size) ;
+
+
 
 //	terminal communication functions
 static int	Send(du8 *const pbuf, const unsigned int num);
@@ -47,23 +48,23 @@ static dboolean prg_Finish(const du8 dev_num);
 
 
 /* device descriptod */
-Dev_descriptor_t dev_descr_arr[_ID_DEV_NUM];/* =
+Dev_descriptor_t dev_descr_arr[_ID_DEV_NUM] =
 {
 
 	{
 	//	FLASH
-		"DD4-W25Q128JV/M_ID=",
-		W25Q128_PAGE_SIZE,
-		W25Q128_PAGE_SIZE,
+		"DD4-W25Q16JV/M_ID=",
+		W25Q16_PAGE_SIZE,
+		W25Q16_PAGE_SIZE,
 		//DSPA_CFG_READ_PAGE_SIZE,
-		_TERMINAL_FPFA_MAX_NUM_BLOCK_*W25Q128_BLOCK_SIZE,
-		W25Q128_TIMEOUT_CHIP_WRITE_S,
-		W25Q128_TIMEOUT_CHIP_ERASE_S,
+		_TERMINAL_FPFA_MAX_NUM_BLOCK_*W25Q16_BLOCK_SIZE,
+		W25Q16_TIMEOUT_CHIP_WRITE_S,
+		W25Q16_TIMEOUT_CHIP_ERASE_S,
 		dtrue,
 		0,
 		0
 		}
-};*/
+};
 
 
 /*	Telemetry descriptor */
@@ -121,6 +122,8 @@ bool terminal_init(void) {
 			_TERMINAL_RECEIVE_TIMEOUT_US_);
 #endif
 
+	set_state_led(LED_STATE_BLINK_WHITE);
+
 	com_start_receive(&uctrl);
 	return true;
 
@@ -140,15 +143,13 @@ void terminal_task(void) {
 	com_check_timeout(&uctrl, _TERMINAL_TASK_TICK_ * 1000);
 #endif
 
-	osDelay(_TERMINAL_TASK_TICK_);
-
-	led_blink(fl_stay_here);
-
-
 	if (reset_request) {
 		bsp_system_reset();
 	}
 
+	led_blink();
+
+	osDelay(_TERMINAL_TASK_TICK_);
 }
 
 /* telemetry */
@@ -162,9 +163,12 @@ void	terminal_telemetry_handler(void){
  *************************************************************************************************/
 //	Translate data -> UART
 static int Send(unsigned char *const buf, const unsigned int num) {
-	com_send(&uctrl, buf, num);
-	fl_stay_here=	true;
 
+	if (get_state_led()==LED_STATE_BLINK_WHITE){
+	//	set_state_led(LED_STATE_BREATH_WHITE);	//	LED_STATE_RG_OFF
+		set_state_led(LED_STATE_RG_OFF);	//
+	}
+	com_send(&uctrl, buf, num);
 	return num;
 }
 
@@ -228,7 +232,7 @@ static du32 prg_ReadId(const du8 dev_num) {
 
 	switch (dev_num) {
 	case _ID_FPGA_FLASH:{
-	//	t=	(uint32_t)DD2.manufacturer_id;
+		t=	(uint32_t)DD15.manufacturer_id;
 		break;
 	}
 	default:	break;
@@ -242,9 +246,8 @@ static dboolean prg_Read(const du8 dev_num, du8 *const pusData,	const du32 ulSta
 
 	switch (dev_num) {
 	case _ID_FPGA_FLASH:{
-		/*SPI_Bus_Acquire_For_STM32();
-		PIN_Reset(&pin_mr_prog);
-		result=	(W25Q128_ReadData(&DD2, ulStartAddress, pusData, W25Q128_PAGE_SIZE)==osOK);*/
+		SPI_Bus_Acquire_For_STM32();
+		result=	(W25Q16_ReadData(&DD15, ulStartAddress, pusData, W25Q16_PAGE_SIZE)==osOK);
 		break;
 	}
 	default:	break;
@@ -257,17 +260,18 @@ static dboolean prg_Read(const du8 dev_num, du8 *const pusData,	const du32 ulSta
 static dboolean prg_Erase(const du8 dev_num) {
 	dboolean result=	false;
 
+	set_state_led(LED_STATE_POLICE_FLASHER);
+
 	switch (dev_num) {
 	case _ID_FPGA_FLASH: {
-		/*PIN_Reset(&pin_mr_prog);
 		SPI_Bus_Acquire_For_STM32();
 		for (uint32_t i = 0; i < _TERMINAL_FPFA_MAX_NUM_BLOCK_; i++) {
-			if (W25Q128_BlockErase(&DD2, i * W25Q128_BLOCK_SIZE) != osOK) {
+			if (W25Q16_BlockErase(&DD15, i * W25Q16_BLOCK_SIZE) != osOK) {
 				SPI_Bus_Release_To_FPGA();
 				return	dfalse;
 			}
 		}
-		SPI_Bus_Release_To_FPGA();*/
+
 		result=	dtrue;
 		break;
 	}
@@ -282,10 +286,7 @@ static dboolean prg_Write(const du8 dev_num, du8 *const pusData,	const du32 ulSt
 
 	switch (dev_num) {
 	case _ID_FPGA_FLASH: {
-		/*if (!SPI_Bus_Is_Acquired()) {
-			SPI_Bus_Acquire_For_STM32();
-		}
-		result =(W25Q128_PageProgram(&DD2, ulStartAddress, pusData, W25Q128_PAGE_SIZE) == osOK);*/
+		result =(W25Q16_PageProgram(&DD15, ulStartAddress, pusData, W25Q16_PAGE_SIZE) == osOK);
 		break;
 	}
 	default:	break;
@@ -298,8 +299,8 @@ static dboolean prg_Write(const du8 dev_num, du8 *const pusData,	const du32 ulSt
 static void prg_Reset(const du8 dev_num) {
 
 	//jump_main_application(SELF_APPL_ADDRESS);
-	/*SPI_Bus_Release_To_FPGA();
-	FPGA_Reset_OS(10);*/
+	SPI_Bus_Release_To_FPGA();
+	FPGA_Reset();
 }
 
 
@@ -309,8 +310,11 @@ static dboolean prg_Finish(const du8 dev_num) {
 	dboolean result = dfalse;
 	switch (dev_num) {
 	case _ID_FPGA_FLASH: {
-		/*SPI_Bus_Release_To_FPGA();
-		FPGA_Reset_OS(10);*/
+
+		set_state_led(LED_STATE_RG_OFF);
+
+		SPI_Bus_Release_To_FPGA();
+		FPGA_Reset();
 		result=	true;
 		break;
 	}
@@ -324,84 +328,6 @@ static dboolean prg_Finish(const du8 dev_num) {
 /**************************************************************************************************
  *  auxiliary functions
  *************************************************************************************************/
-/*
-#include "rgb_led.h"
-
- Reference to the global LED handler
-extern LED_Handler_t led_main;
-
-void led_blink(bool f) {
-    static bool last_f = false;
-    static bool is_initialized = false;
-
-     Execute transition only on state change
-    if (f != last_f || !is_initialized) {
-
-        if (!f) {
-             State TRUE: Transition from Pure White (W only) to Blue
-             Using {R, G, B, W} structure
-            LED_Color_t color_start = {0, 0, 0, 0};   Pure White via W-die
-            LED_Color_t color_end   = {0, 0, 100, 0};   Pure Blue
-
-            RGB_LED_StartTransition(&led_main, color_start, color_end, 2000, true);
-        }
-        else {
-             State FALSE: Quick transition from Red to Green
-            LED_Color_t color_start = {20, 0, 0, 0};   Pure Red
-            LED_Color_t color_end   = {0, 20, 0, 0};   Pure Green
-
-            RGB_LED_StartTransition(&led_main, color_start, color_end, 500, true);
-        }
-
-        last_f = f;
-        is_initialized = true;
-    }
-}
-
-*/
-
-
-void led_blink(bool f) {
-    static bool last_f = false;
-    static uint32_t ticks = 0;
-    static uint8_t step = 0;
-
-    /* Reset state machine if 'f' changes */
-    if (f != last_f) {
-        last_f = f;
-        ticks = 0;
-        step = 0;
-    }
-
-    ticks++;
-
-    if (!f) {
-        /* Pattern: White (W=25) -> Off (250ms cycle) */
-        if (ticks >= 500) {
-            ticks = 0;
-            LED_Color_t next_color = (step == 0) ? (LED_Color_t){0, 0, 0, 5} : (LED_Color_t){0, 0, 0, 0};
-            RGB_LED_SetColor(&led_main, next_color);
-            step = !step;
-        }
-    }
-    else {
-        /* Pattern: Red -> Off -> Green -> Off (500ms cycle -> 125ms per state) */
-        if (ticks >= 500) {
-            ticks = 0;
-            LED_Color_t next_color = {0, 0, 0, 0};
-
-            switch (step) {
-                case 0: next_color = (LED_Color_t){15, 0, 0, 0}; break; /* Red */
-                case 1: next_color = (LED_Color_t){0, 0, 0, 0};  break; /* Off */
-                case 2: next_color = (LED_Color_t){0, 15, 0, 0}; break; /* Green */
-                case 3: next_color = (LED_Color_t){0, 0, 0, 0};  break; /* Off */
-            }
-
-            RGB_LED_SetColor(&led_main, next_color);
-            step = (step + 1) % 4;
-        }
-    }
-}
 
 /* uint32_t ->string */
 static char* uint32_to_string(uint32_t n, char *buffer, size_t buffer_size) {
@@ -425,3 +351,8 @@ static char* uint32_to_string(uint32_t n, char *buffer, size_t buffer_size) {
 	buffer[j] = '\0';
 	return buffer;
 }
+
+
+
+
+
