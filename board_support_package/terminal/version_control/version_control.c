@@ -8,7 +8,7 @@ const char _VC_BOARD_NUMBER_[] =        "Board:  7111.00.00.000\n";
 const char _VC_CHIP_DESIGNATION_[] =    "Chip: DD11 ";
 const char _VC_SOFT_NAME_[] =           "STM32F415ZGT6\n";
 const char _VC_SOFT_NOTE_[] =           "SW:  produced by mr. Andrew Auramenka \n";
-const char _VC_SOFT_VERSION_[] =        "Ver. 1.3";
+const char _VC_SOFT_VERSION_[] =        "Ver. 1.5";
 
 // Build timestamp (compilation date and time)
 static const char* build = __DATE__"  "__TIME__"\n";

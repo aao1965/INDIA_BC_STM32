@@ -168,15 +168,14 @@ void StartDefaultTask(void *argument)
   /* USER CODE END StartDefaultTask */
 }
 
-
 /* USER CODE BEGIN Header_StartLowLevelTask */
 float current_temp;
 AM1805_Time_t current_time;
 char time_str[32];          // Буфер для строки "HH:MM:SS [XT]"
 /* USER CODE END Header_StartLowLevelTask */
-
-void StartLowLevelTask(void *argument) {
-	/* USER CODE BEGIN StartLowLevelTask */
+void StartLowLevelTask(void *argument)
+{
+  /* USER CODE BEGIN StartLowLevelTask */
 
 	for (;;) {
 		// 4. Update current temperature
@@ -188,15 +187,8 @@ void StartLowLevelTask(void *argument) {
 
 		osDelay(500);
 	}
-	/* USER CODE END StartLowLevelTask */
+  /* USER CODE END StartLowLevelTask */
 }
-
-
-
-
-
-
-
 
 /* USER CODE BEGIN Header_StartTerminalTask */
 /**
@@ -205,15 +197,16 @@ void StartLowLevelTask(void *argument) {
 * @retval None
 */
 /* USER CODE END Header_StartTerminalTask */
-void StartTerminalTask(void *argument) {
-	/* USER CODE BEGIN StartTerminalTask */
+void StartTerminalTask(void *argument)
+{
+  /* USER CODE BEGIN StartTerminalTask */
 	/* Infinite loop */
 	for (;;) {
 		terminal_task();
 		PIN_Toggle_S(&pin_tp1);
 
 	}
-	/* USER CODE END StartTerminalTask */
+  /* USER CODE END StartTerminalTask */
 }
 
 /* Private application code --------------------------------------------------*/

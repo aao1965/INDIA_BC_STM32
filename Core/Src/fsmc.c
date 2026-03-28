@@ -62,10 +62,10 @@ void MX_FSMC_Init(void)
   hsram1.Init.WriteBurst = FSMC_WRITE_BURST_DISABLE;
   hsram1.Init.PageSize = FSMC_PAGE_SIZE_NONE;
   /* Timing */
-  Timing.AddressSetupTime = 15;
+  Timing.AddressSetupTime = 5;
   Timing.AddressHoldTime = 15;
-  Timing.DataSetupTime = 50;
-  Timing.BusTurnAroundDuration = 15;
+  Timing.DataSetupTime = 15;
+  Timing.BusTurnAroundDuration = 5;
   Timing.CLKDivision = 16;
   Timing.DataLatency = 17;
   Timing.AccessMode = FSMC_ACCESS_MODE_A;
@@ -89,17 +89,17 @@ void MX_FSMC_Init(void)
   hsram2.Init.WaitSignalPolarity = FSMC_WAIT_SIGNAL_POLARITY_LOW;
   hsram2.Init.WrapMode = FSMC_WRAP_MODE_DISABLE;
   hsram2.Init.WaitSignalActive = FSMC_WAIT_TIMING_BEFORE_WS;
-  hsram2.Init.WriteOperation = FSMC_WRITE_OPERATION_DISABLE;
+  hsram2.Init.WriteOperation = FSMC_WRITE_OPERATION_ENABLE;
   hsram2.Init.WaitSignal = FSMC_WAIT_SIGNAL_DISABLE;
   hsram2.Init.ExtendedMode = FSMC_EXTENDED_MODE_DISABLE;
   hsram2.Init.AsynchronousWait = FSMC_ASYNCHRONOUS_WAIT_DISABLE;
   hsram2.Init.WriteBurst = FSMC_WRITE_BURST_DISABLE;
   hsram2.Init.PageSize = FSMC_PAGE_SIZE_NONE;
   /* Timing */
-  Timing.AddressSetupTime = 15;
+  Timing.AddressSetupTime = 5;
   Timing.AddressHoldTime = 15;
-  Timing.DataSetupTime = 50;
-  Timing.BusTurnAroundDuration = 15;
+  Timing.DataSetupTime = 15;
+  Timing.BusTurnAroundDuration = 5;
   Timing.CLKDivision = 16;
   Timing.DataLatency = 17;
   Timing.AccessMode = FSMC_ACCESS_MODE_A;
@@ -123,17 +123,17 @@ void MX_FSMC_Init(void)
   hsram3.Init.WaitSignalPolarity = FSMC_WAIT_SIGNAL_POLARITY_LOW;
   hsram3.Init.WrapMode = FSMC_WRAP_MODE_DISABLE;
   hsram3.Init.WaitSignalActive = FSMC_WAIT_TIMING_BEFORE_WS;
-  hsram3.Init.WriteOperation = FSMC_WRITE_OPERATION_DISABLE;
+  hsram3.Init.WriteOperation = FSMC_WRITE_OPERATION_ENABLE;
   hsram3.Init.WaitSignal = FSMC_WAIT_SIGNAL_DISABLE;
   hsram3.Init.ExtendedMode = FSMC_EXTENDED_MODE_DISABLE;
   hsram3.Init.AsynchronousWait = FSMC_ASYNCHRONOUS_WAIT_DISABLE;
   hsram3.Init.WriteBurst = FSMC_WRITE_BURST_DISABLE;
   hsram3.Init.PageSize = FSMC_PAGE_SIZE_NONE;
   /* Timing */
-  Timing.AddressSetupTime = 15;
+  Timing.AddressSetupTime = 10;
   Timing.AddressHoldTime = 15;
-  Timing.DataSetupTime = 255;
-  Timing.BusTurnAroundDuration = 15;
+  Timing.DataSetupTime = 30;
+  Timing.BusTurnAroundDuration = 10;
   Timing.CLKDivision = 16;
   Timing.DataLatency = 17;
   Timing.AccessMode = FSMC_ACCESS_MODE_A;

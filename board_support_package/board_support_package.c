@@ -13,6 +13,8 @@
 #include "led_blink.h"
 #include "ds1621.h"
 #include "am1805.h"
+#include "fsmc_memory.h"
+#include "fm22l16.h"
 #include "terminal.h"
 #include "terminal_signals.h"
 
@@ -55,6 +57,16 @@ uint32_t init_hardware(void) {
 		}
 	}
 
+	// Initialize fsmc library and recursive mutex
+	if (fsmc_init() != FSMC_OK) {
+		test_hardware_result |= _B_FAULT_FSMC_;
+	} else {
+		// FSMC bus is ready for use
+		if (fm22_test_quick() != FSMC_OK) {
+			test_hardware_result |= _B_FAULT_FRAM_;
+		}
+
+	}
 
 	// Initialize RGB LED
 	if (RGB_LED_Init(&led_main, &htim3, TIM_CHANNEL_1) != true) {

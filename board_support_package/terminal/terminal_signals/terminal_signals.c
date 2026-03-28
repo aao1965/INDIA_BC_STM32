@@ -11,9 +11,12 @@
 #include	"terminal_signals.h"
 
 #include 	"am1805.h"
+#include	"fm22l16.h"
+#include 	"led_blink.h"
 
 static	char *sDEV = "";
 static	char *sFLASH = "";
+static 	char *sFM22L16 = "";
 static  char *sDEBUG = "";
 static 	char *sTIME = "";
 static  char *sTIME_CORRECTION = "";
@@ -32,16 +35,12 @@ static	AM1805_Time_t set_time={
 static	bool	run_set_data=	false;
 static	float  ppm_rtc= 0;
 static	bool	run_set_correction=	false;
+static 	bool	run_fm22l16_full_test= false;
+static  bool 	status_fm22l16_test= false;
 
 SIGNALS_BEGIN(DSPA_SIGNALS_NAME)
 	_STRING_R_  ("Ballistic computer board", sDEV, NULL),
 		_U32_R_	("Test hardware",	test_hardware_result,&sDEV),
-		_STRING_R_("W25Q16JVSSIQ", sFLASH, &sDEV),
-			_BYTE_R_("JDECID0", DD15.manufacturer_id,&sFLASH),
-			_BYTE_R_("JDECID1", DD15.memory_type,&sFLASH),
-			_BYTE_R_("JDECID2", DD15.capacity_id,&sFLASH),
-			_U64_R_("DD2 UID", 	DD15.unique_id,&sFLASH),
-
 		_STRING_R_ ("Date + Time", sTIME, &sDEV),
 			_STRING_R_ ("current data ", time_str, &sTIME),
 			_BOOL_R_("XT_osc present",set_time.is_xt_active, &sTIME),
@@ -62,6 +61,14 @@ SIGNALS_BEGIN(DSPA_SIGNALS_NAME)
 				_BYTE_R_("OSC STATUS",  rtc_diag.osc_stat, &sTIME_CORRECTION),
 				_BYTE_R_("STATUS",  rtc_diag.status, &sTIME_CORRECTION),
 	_STRING_R_  ("Debug section", sDEBUG, NULL),
+		_STRING_R_("W25Q16JVSSIQ", sFLASH, &sDEBUG),
+			_BYTE_R_("JDECID0", DD15.manufacturer_id,&sFLASH),
+			_BYTE_R_("JDECID1", DD15.memory_type,&sFLASH),
+			_BYTE_R_("JDECID2", DD15.capacity_id,&sFLASH),
+			_U64_R_("DD2 UID", 	DD15.unique_id,&sFLASH),
+		_STRING_R_("FM22L16", sFM22L16, &sDEBUG),
+			_BOOL_R_("status test", status_fm22l16_test, &sFM22L16),
+			_BOOL_RW_("full test(all data will be destroyed)", run_fm22l16_full_test, &sFM22L16),
 		_FLOAT_R_("ds1621s+(°C) ", current_temp, &sDEBUG)
 
 SIGNALS_END(DSPA_SIGNALS_NAME)
@@ -73,14 +80,22 @@ int	init_terminal_signals(void){
 
 
 void signal_change_handler(void *s) {
+	// установка даты
 	if (s==&run_set_data){
 		run_set_data= false;
 		AM1805_SetTime(&set_time);
 
 	}
-
+	// запись коррекции RTC
 	if (s==&run_set_correction){
 		run_set_correction=	false;
 		AM1805_SetCalibration(ppm_rtc);
+	}
+
+	// полный тест
+	if (s == &run_fm22l16_full_test) {
+		run_fm22l16_full_test = false;
+		status_fm22l16_test= false;
+		status_fm22l16_test = (fm22_test_full() == FSMC_OK);
 	}
 }

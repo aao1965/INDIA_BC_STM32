@@ -49,7 +49,9 @@ extern	SPI_HandleTypeDef 	hspi1;
 #define		_B_FAULT_FPGA_				B4
 #define		_B_FAULT_AM1805_			B5
 #define		_B_FAULT_W25Q16_			B6
-#define		_B_FAULT_TERMINAL_			B8
+#define		_B_FAULT_FSMC_				B7
+#define		_B_FAULT_FRAM_				B8
+#define		_B_FAULT_TERMINAL_			B15
 
 
 
