@@ -15,6 +15,9 @@
 #include "am1805.h"
 #include "fsmc_memory.h"
 #include "fm22l16.h"
+#include "fpga.h"
+#include "spi_fpga_bridge.h"
+
 #include "terminal.h"
 #include "terminal_signals.h"
 
@@ -57,6 +60,14 @@ uint32_t init_hardware(void) {
 		}
 	}
 
+
+	// Initialize STM32 <-> fpga bridge SPI
+	if (!SPI_FPGA_Init(&hspi2)){
+		test_hardware_result |= _B_FAULT_SPI_FPGA_;
+	}else{
+
+	}
+
 	// Initialize fsmc library and recursive mutex
 	if (fsmc_init() != FSMC_OK) {
 		test_hardware_result |= _B_FAULT_FSMC_;
@@ -65,7 +76,9 @@ uint32_t init_hardware(void) {
 		if (fm22_test_quick() != FSMC_OK) {
 			test_hardware_result |= _B_FAULT_FRAM_;
 		}
-
+		if (fpga_test_link() != FSMC_OK){
+			test_hardware_result |= _B_FAULT_EMI_FPGA_;
+		}
 	}
 
 	// Initialize RGB LED
@@ -144,5 +157,8 @@ void bsp_system_reset(void) {
     HAL_NVIC_SystemReset();
 }
 
+
+
+/********************************** WEAK INTERRUPT CALLBACK ***************************************/
 
 

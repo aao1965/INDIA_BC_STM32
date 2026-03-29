@@ -31,6 +31,9 @@
 #include "ds1621.h"
 #include "am1805.h"
 #include "terminal.h"
+#include "fpga.h"
+#include "spi_fpga_bridge.h"
+#include "fpga_reg_map.h"
 
 /* USER CODE END Includes */
 
@@ -172,6 +175,9 @@ void StartDefaultTask(void *argument)
 float current_temp;
 AM1805_Time_t current_time;
 char time_str[32];          // Буфер для строки "HH:MM:SS [XT]"
+
+uint16_t test_fpga=0;
+
 /* USER CODE END Header_StartLowLevelTask */
 void StartLowLevelTask(void *argument)
 {
@@ -185,6 +191,8 @@ void StartLowLevelTask(void *argument)
 			AM1805_FormatFullDateTime(time_str, sizeof(time_str),	&current_time);
 		}
 
+
+
 		osDelay(500);
 	}
   /* USER CODE END StartLowLevelTask */
@@ -196,6 +204,8 @@ void StartLowLevelTask(void *argument)
 * @param argument: Not used
 * @retval None
 */
+
+
 /* USER CODE END Header_StartTerminalTask */
 void StartTerminalTask(void *argument)
 {
@@ -204,7 +214,16 @@ void StartTerminalTask(void *argument)
 	for (;;) {
 		terminal_task();
 		PIN_Toggle_S(&pin_tp1);
+		fpga_tgl_bit(66, 1);
 
+		/*fpga_read(ADDR_DEBUG_FEEDBACK, &test_fpga);
+		test_fpga++;
+		fpga_write(ADDR_DEBUG_FEEDBACK, test_fpga);*/
+		SPI_FPGA_Read(ADDR_S_DEBUG_FEEDBACK, &test_fpga);
+		test_fpga+=256;
+		SPI_FPGA_Write(ADDR_S_DEBUG_FEEDBACK, test_fpga);
+
+		SPI_FPGA_ToggleBits(ADDR_S_DEBUG_MISC, 1);
 	}
   /* USER CODE END StartTerminalTask */
 }

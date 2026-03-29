@@ -37,7 +37,12 @@ extern I2C_HandleTypeDef hi2c1;
 extern	UART_HandleTypeDef 	huart1;
 extern	DMA_HandleTypeDef 	hdma_usart1_rx;
 extern	DMA_HandleTypeDef 	hdma_usart1_tx;
+
+// W25Q16 spi
 extern	SPI_HandleTypeDef 	hspi1;
+//	fpga misc SPI
+extern	SPI_HandleTypeDef hspi2;
+
 
 /* ********************************************************
  * test	fault bits  */
@@ -51,6 +56,8 @@ extern	SPI_HandleTypeDef 	hspi1;
 #define		_B_FAULT_W25Q16_			B6
 #define		_B_FAULT_FSMC_				B7
 #define		_B_FAULT_FRAM_				B8
+#define		_B_FAULT_EMI_FPGA_			B9
+#define		_B_FAULT_SPI_FPGA_			B10
 #define		_B_FAULT_TERMINAL_			B15
 
 
