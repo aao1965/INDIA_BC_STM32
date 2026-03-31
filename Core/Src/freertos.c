@@ -34,6 +34,7 @@
 #include "fpga.h"
 #include "spi_fpga_bridge.h"
 #include "fpga_reg_map.h"
+#include "fpga_pwm.h"
 
 /* USER CODE END Includes */
 
@@ -192,7 +193,7 @@ void StartLowLevelTask(void *argument)
 		}
 
 
-
+		fpga_tgl_bit(66, 2);
 		osDelay(500);
 	}
   /* USER CODE END StartLowLevelTask */
@@ -205,6 +206,7 @@ void StartLowLevelTask(void *argument)
 * @retval None
 */
 
+uint16_t pwm;
 
 /* USER CODE END Header_StartTerminalTask */
 void StartTerminalTask(void *argument)
@@ -223,7 +225,14 @@ void StartTerminalTask(void *argument)
 		test_fpga+=256;
 		SPI_FPGA_Write(ADDR_S_DEBUG_FEEDBACK, test_fpga);
 
-		SPI_FPGA_ToggleBits(ADDR_S_DEBUG_MISC, 1);
+		static bool f;
+		if (f){
+
+			fpga_pwm_set_duty(pwm);
+			pwm+=16;
+			if (pwm==10000)pwm=0;
+		}
+		f=!f;
 	}
   /* USER CODE END StartTerminalTask */
 }

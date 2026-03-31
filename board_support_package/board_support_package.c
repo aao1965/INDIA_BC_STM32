@@ -16,6 +16,8 @@
 #include "fsmc_memory.h"
 #include "fm22l16.h"
 #include "fpga.h"
+#include "fpga_pwm.h"
+#include "fpga_ic.h"
 #include "spi_fpga_bridge.h"
 
 #include "terminal.h"
@@ -69,7 +71,7 @@ uint32_t init_hardware(void) {
 	}
 
 	// Initialize fsmc library and recursive mutex
-	if (fsmc_init() != FSMC_OK) {
+	/*if (fsmc_init() != FSMC_OK) {
 		test_hardware_result |= _B_FAULT_FSMC_;
 	} else {
 		// FSMC bus is ready for use
@@ -78,6 +80,34 @@ uint32_t init_hardware(void) {
 		}
 		if (fpga_test_link() != FSMC_OK){
 			test_hardware_result |= _B_FAULT_EMI_FPGA_;
+		}else{
+			fpga_pwm_init(10000, 5000);
+			setup_fpga_interrupts();
+		}
+	}*/
+
+	// Initialize fsmc library and recursive mutex
+	if (fsmc_init() != FSMC_OK) {
+		test_hardware_result |= _B_FAULT_FSMC_;
+	} else {
+		// FSMC bus is ready for use
+		if (fm22_test_quick() != FSMC_OK) {
+			test_hardware_result |= _B_FAULT_FRAM_;
+		}
+
+		// Проверяем связь с ПЛИС (чтение константы)
+		if (fpga_test_link() != FSMC_OK) {
+			test_hardware_result |= _B_FAULT_EMI_FPGA_;
+		} else {
+			// ПЛИС на связи, настраиваем периферию
+			fpga_pwm_init(10000, 5000);
+
+			// Инициализируем контроллер прерываний и задачи FreeRTOS
+			if (setup_fpga_interrupts() != pdPASS) {
+				// Сюда попадем, если не хватило RAM для задачи/семафора
+				// или пропала связь по FSMC в процессе настройки
+				test_hardware_result |= _B_FAULT_EMI_FPGA_; // или _B_FAULT_OS_ERROR_
+			}
 		}
 	}
 

@@ -23,6 +23,7 @@ extern LED_Handler_t led_main;
 // debug section
 extern float current_temp;
 extern uint16_t test_fpga;
+extern uint32_t cnt_1kHz_interrupt;
 
 
 
