@@ -33,7 +33,7 @@ static	AM1805_Time_t set_time={
 	};
 
 static	bool	run_set_data=	false;
-static	float  ppm_rtc= 0;
+static	float  	ppm_rtc= 0;
 static	bool	run_set_correction=	false;
 static 	bool	run_fm22l16_full_test= false;
 static  bool 	status_fm22l16_test= false;
@@ -52,7 +52,7 @@ SIGNALS_BEGIN(DSPA_SIGNALS_NAME)
 			_BYTE_RW_("day", set_time.day, &sTIME),
 			_BOOL_RW_("set data",run_set_data, &sTIME),
 			_STRING_R_ ("Time calibration", sTIME_CORRECTION, &sTIME),
-				_FLOAT_RW_("corr.[ppm](+speeds up)",ppm_rtc,&sTIME_CORRECTION ),
+				_FLOAT_RW_("corr.[sec./hour](+speeds up)",ppm_rtc,&sTIME_CORRECTION ),
 				_BOOL_RW_("set correction",run_set_correction, &sTIME_CORRECTION),
 				_BYTE_R_("BREF",  rtc_diag.bref, &sTIME_CORRECTION),
 				_BYTE_R_("CAL_XT",  rtc_diag.cal_xt, &sTIME_CORRECTION),
@@ -91,7 +91,7 @@ void signal_change_handler(void *s) {
 	// запись коррекции RTC
 	if (s==&run_set_correction){
 		run_set_correction=	false;
-		AM1805_SetCalibration(ppm_rtc);
+		AM1805_SetCalibrationByDrift(ppm_rtc);
 	}
 
 	// полный тест
