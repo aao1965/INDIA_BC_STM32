@@ -37,48 +37,69 @@ static AM1805_Status i2c_transfer(uint8_t reg, uint8_t *pData, uint16_t size, bo
 }
 
 /* ========================================================================== */
-/* ИНИЦИАЛИЗАЦИЯ                               */
+/* ИНИЦИАЛИЗАЦИЯ И СБРОС                                                      */
 /* ========================================================================== */
 
+/**
+ * @brief Умная инициализация чипа. Проверяет регистры перед записью.
+ * ВНИМАНИЕ: Не трогает регистр калибровки CAL_XT! Калибровка выполняется отдельно.
+ */
 bool AM1805_Init_Smart(I2C_HandleTypeDef *hi2c_ptr, osMutexId_t mutex_id) {
     p_hi2c = hi2c_ptr;
     i2c_mutex = mutex_id;
     uint8_t data, key;
+    uint8_t current_val = 0;
 
     if (HAL_I2C_IsDeviceReady(p_hi2c, AM1805_ADDR, 5, AM1805_I2C_TIMEOUT) != HAL_OK) 
         return false;
 
-    // 1. Настройка осциллятора: Выбор XT кварца
-    key = AM1805_KEY_OSC;
-    i2c_transfer(AM1805_REG_KEY, &key, 1, false); 
-    data = 0x00; 
-    i2c_transfer(AM1805_REG_OSC_CTRL, &data, 1, false);
+    // 1. УМНАЯ настройка осциллятора (запускаем генератор, если он остановлен)
+    i2c_transfer(AM1805_REG_OSC_CTRL, &current_val, 1, true);
+    if (current_val != 0x00) { 
+        key = AM1805_KEY_OSC;
+        i2c_transfer(AM1805_REG_KEY, &key, 1, false); 
+        data = 0x00; 
+        i2c_transfer(AM1805_REG_OSC_CTRL, &data, 1, false);
+    }
 
-    // 2. Настройка порогов батареи (BREF) под батарею 2.85V
-    key = AM1805_KEY_CONF;
-    i2c_transfer(AM1805_REG_KEY, &key, 1, false); 
-    data = 0xB0; 
-    i2c_transfer(AM1805_REG_BREF, &data, 1, false);
+    // 2. УМНАЯ настройка порогов батареи (BREF = 2.1V для стабильной работы от 2.88V)
+    i2c_transfer(AM1805_REG_BREF, &current_val, 1, true);
+    if (current_val != 0xB0) { 
+        key = AM1805_KEY_CONF;
+        i2c_transfer(AM1805_REG_KEY, &key, 1, false); 
+        data = 0xB0; 
+        i2c_transfer(AM1805_REG_BREF, &data, 1, false);
+    }
 
-    // 3. Изоляция I/O шины (IOBM)
+    // 3. Изоляция I/O шины (BATMODE_IO) - для стабильности I2C при работе от батареи
     key = AM1805_KEY_CONF;
     i2c_transfer(AM1805_REG_KEY, &key, 1, false); 
     data = 0x00; 
     i2c_transfer(AM1805_REG_BATMODE_IO, &data, 1, false);
 
-    // 4. Разрешение записи времени
+    // 4. Разрешение записи времени (Включаем только WRTC, силовой ключ PWR2 выключен)
     data = 0x01; 
     i2c_transfer(AM1805_REG_CTRL1, &data, 1, false);
-
-    // 5. Грубое устранение набега времени (Аппаратное замедление кварца 12.5pF)
-    data = (0x01 << 6); 
-    i2c_transfer(AM1805_REG_OSC_STAT, &data, 1, false);
 
     return true;
 }
 
+/**
+ * @brief Полный программный сброс чипа до заводских настроек.
+ */
+AM1805_Status AM1805_SoftwareReset(void) {
+    uint8_t reset_cmd = 0x3C;
+    AM1805_Status status = i2c_transfer(AM1805_REG_KEY, &reset_cmd, 1, false);
+    
+    // Отдаем процессорное время другим задачам RTOS, 
+    // пока чип AM1805 перезагружает внутренние цепи (10 мс)
+    osDelay(10); // Предполагается, что 1 тикет RTOS = 1 мс
+    
+    return status;
+}
+
 /* ========================================================================== */
-/* РАБОТА СО ВРЕМЕНЕМ                             */
+/* РАБОТА СО ВРЕМЕНЕМ                                                         */
 /* ========================================================================== */
 
 AM1805_Status AM1805_GetTime(AM1805_Time_t *time) {
@@ -109,6 +130,7 @@ AM1805_Status AM1805_SetTime(AM1805_Time_t *time) {
     uint8_t buffer[8];
     uint8_t ctrl1 = 0x01;
 
+    // Убеждаемся, что бит WRTC (разрешение записи) установлен
     if (i2c_transfer(AM1805_REG_CTRL1, &ctrl1, 1, false) != AM1805_OK) 
         return AM1805_ERROR;
 
@@ -128,7 +150,7 @@ AM1805_Status AM1805_SetTime(AM1805_Time_t *time) {
 }
 
 /* ========================================================================== */
-/* КАЛИБРОВКА И ДИАГНОСТИКА                       */
+/* КАЛИБРОВКА И ДИАГНОСТИКА                                                   */
 /* ========================================================================== */
 
 AM1805_Status AM1805_SetCalibration(float adj_ppm) {
@@ -136,6 +158,7 @@ AM1805_Status AM1805_SetCalibration(float adj_ppm) {
     uint8_t data;
     uint8_t key;
 
+    // Накладываем маску 0x7F (7 бит) для Two's complement
     data = (uint8_t)(cal_val & 0x7F); 
 
     key = AM1805_KEY_CONF;
@@ -145,29 +168,24 @@ AM1805_Status AM1805_SetCalibration(float adj_ppm) {
 }
 
 /**
- * @brief Тонкая настройка калибровки по уходу времени (в секундах за час)
- * * В AM1805 изменение CAL_XT на 1 единицу (LSB) смещает частоту на 1.907 ppm.
- * 1 ppm = 1 микросекунда на 1 секунду, что равно 0.0036 секунды за 1 час.
- * Таким образом, 1 LSB корректирует уход на 1.907 * 0.0036 ≈ 0.0068652 секунды в час.
+ * @brief Тонкая настройка калибровки по уходу времени.
+ * Вычисляется по формуле: 1 LSB регистра CAL_XT = 0.0068652 секунды в час.
+ * Максимальный диапазон регистра: от -64 (0x40) до +63 (0x3F).
  */
 AM1805_Status AM1805_SetCalibrationByDrift(float drift_sec_per_hour) {
-    // Константа: сколько секунд ухода за 1 час компенсирует 1 шаг регистра CAL_XT
     const float LSB_IN_SEC_PER_HOUR = 0.0068652f;
     
-    // Вычисляем необходимое значение регистра.
-    // Если часы спешат (+), значение будет положительным (чип добавит задержку).
-    // Если отстают (-), значение будет отрицательным (чип уменьшит задержку).
+    // Вычисляем значение
     int16_t cal_val = (int16_t)(drift_sec_per_hour / LSB_IN_SEC_PER_HOUR);
 
-    // Защита: регистр CAL_XT 7-битный, принимает значения от -64 до +63 (Two's complement)
+    // Ограничиваем в допустимых пределах (-64 ... +63)
     if (cal_val > 63) {
         cal_val = 63;
     } else if (cal_val < -64) {
         cal_val = -64;
     }
 
-    // Бит 7 (CMDW) должен быть 0 для нормальной калибровки.
-    // Накладываем маску 0x7F для преобразования в 7-битный формат.
+    // Приводим к 7-битному формату Two's complement
     uint8_t data = (uint8_t)(cal_val & 0x7F); 
 
     uint8_t key = AM1805_KEY_CONF;

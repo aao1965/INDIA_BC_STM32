@@ -144,6 +144,7 @@ void terminal_task(void) {
 #endif
 
 	if (reset_request) {
+		osDelay(200);
 		bsp_system_reset();
 	}
 

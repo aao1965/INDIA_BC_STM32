@@ -129,7 +129,7 @@ uint32_t init_hardware(void) {
 			// 2. AM1805_Init_Smart enables XT and CLKOUT if defined
 			if (AM1805_Init_Smart(&hi2c1, shared_i2c_mutex)) {
 
-
+			//	AM1805_SoftwareReset();
 				// --- Diagnostic Block ---
 
 				if (AM1805_ReadDiagnostic(&rtc_diag) == AM1805_OK) {

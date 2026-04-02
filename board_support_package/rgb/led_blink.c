@@ -1,7 +1,7 @@
 #include "led_blink.h"
 
 /* --- НАСТРОЙКА ЯРКОСТИ --- */
-#define MASTER_BRIGHTNESS 	7
+#define MASTER_BRIGHTNESS 	5
 #define L(val) ((uint8_t)((val * MASTER_BRIGHTNESS) / 100))
 
 /* --- ПАЛИТРА --- */
@@ -18,7 +18,8 @@ static const LED_Phase_t P_RG_OFF[] = {
 };
 
 static const LED_Phase_t P_BLINK_W[] = {
-    {C_WHITEW, 500}, {C_OFF, 500}
+    /*{C_WHITEW, 500}, {C_OFF, 500}*/
+	{C_WHITEW, 100}, {C_OFF,900}
 };
 
 static const LED_Phase_t P_TRAFFIC[] = {
