@@ -216,7 +216,12 @@ void StartTerminalTask(void *argument)
 	for (;;) {
 		terminal_task();
 		PIN_Toggle_S(&pin_tp1);
-		fpga_tgl_bit(66, 1);
+
+
+		fpga_set_bit(ADDR_DEBUG_MISC, B0);
+		delay_us(30);
+		fpga_clr_bit(ADDR_DEBUG_MISC, B0);
+
 
 		/*fpga_read(ADDR_DEBUG_FEEDBACK, &test_fpga);
 		test_fpga++;

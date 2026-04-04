@@ -70,4 +70,8 @@ uint32_t 	get_status_hardware(void);
 bool		get_rcc_csr(void);
 void		bsp_system_reset(void);
 
+void DWT_Init(void);
+void DWT_DeInit(void);
+void delay_us(uint32_t us);
+
 #endif /* BOARD_SUPPORT_PACKAGE_H_ */

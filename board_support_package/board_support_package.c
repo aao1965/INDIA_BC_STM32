@@ -31,9 +31,13 @@ uint32_t test_hardware_result = _B_TEST_HARDWARE_SUCCESS_;
 LED_Handler_t led_main;
 W25Q16_Handle_t DD15;	// FPGA external flash memory handle
 AM1805_Diag_t rtc_diag;
+bool	soft_reset;
 
 // Initialize all hardware components
 uint32_t init_hardware(void) {
+
+	DWT_Init();
+	soft_reset=	get_rcc_csr();
 
 	// Initialize GPIO
 	if (PIN_Mgmt_Init()!=osOK){
@@ -71,22 +75,6 @@ uint32_t init_hardware(void) {
 	}
 
 	// Initialize fsmc library and recursive mutex
-	/*if (fsmc_init() != FSMC_OK) {
-		test_hardware_result |= _B_FAULT_FSMC_;
-	} else {
-		// FSMC bus is ready for use
-		if (fm22_test_quick() != FSMC_OK) {
-			test_hardware_result |= _B_FAULT_FRAM_;
-		}
-		if (fpga_test_link() != FSMC_OK){
-			test_hardware_result |= _B_FAULT_EMI_FPGA_;
-		}else{
-			fpga_pwm_init(10000, 5000);
-			setup_fpga_interrupts();
-		}
-	}*/
-
-	// Initialize fsmc library and recursive mutex
 	if (fsmc_init() != FSMC_OK) {
 		test_hardware_result |= _B_FAULT_FSMC_;
 	} else {
@@ -118,45 +106,44 @@ uint32_t init_hardware(void) {
 		led_blink_init(&led_main);
 	}
 
-	// 1. Initialize DS1621 first
-		if (DS1621_Init(&hi2c1)) {
-			if (DS1621_CreateTask() == NULL) {
-				test_hardware_result |= _B_FAULT_DS1621_;
-			}
-
-			osMutexId_t shared_i2c_mutex = DS1621_GetI2CMutex();
-
-			// 2. AM1805_Init_Smart enables XT and CLKOUT if defined
-			if (AM1805_Init_Smart(&hi2c1, shared_i2c_mutex)) {
-
-			//	AM1805_SoftwareReset();
-				// --- Diagnostic Block ---
-
-				if (AM1805_ReadDiagnostic(&rtc_diag) == AM1805_OK) {
-					// Place breakpoint here to inspect rtc_diag in Watch window
-					// Check rtc_diag.ostat: 0x00 means XT is active, 0x10 means RC fallback
-					(void)rtc_diag;
-				}
-				// ------------------------
-
-				AM1805_Time_t now;
-
-				// 3. Read time to check if RTC is valid
-				if (AM1805_GetTime(&now) == AM1805_OK) {
-					if (now.year <= 2000) {
-						AM1805_Time_t build = AM1805_ParseBuildTime(__DATE__, __TIME__);
-						AM1805_SetTime(&build);
-					}
-				}
-
-			} else {
-				test_hardware_result |= _B_FAULT_AM1805_;
-			}
-		} else {
+	// 1. Сначала инициализируем DS1621
+	if (DS1621_Init(&hi2c1)) {
+		if (DS1621_CreateTask() == NULL) {
 			test_hardware_result |= _B_FAULT_DS1621_;
-			// Try to init RTC anyway (CLKOUT will still start if defined)
-			AM1805_Init_Smart(&hi2c1, NULL);
 		}
+
+		osMutexId_t shared_i2c_mutex = DS1621_GetI2CMutex();
+
+		// 2. Умная инициализация RTC (XT, BREF, IOBM)
+		if (AM1805_Init_Smart(&hi2c1, shared_i2c_mutex)) {
+	//	if 	(AM1805_ForceInit(&hi2c1, shared_i2c_mutex, 0x55AA3C0F)){
+			// --- Блок диагностики ---
+			// Используем согласованное имя функции
+			if (AM1805_GetDiagnostics(&rtc_diag) == AM1805_OK) {
+				// В Watch window смотрим rtc_diag.osc_stat:
+				// 0x00 - XT активен, 0x10 - переход на RC (ошибка)
+				(void) rtc_diag;
+			}
+			// ------------------------
+
+			AM1805_Time_t now;
+
+			// 3. Читаем время. Если оно сброшено (год <= 2000), ставим дату сборки
+			if (AM1805_GetTime(&now) == AM1805_OK) {
+				if (now.year <= 2000) {
+					AM1805_Time_t build = AM1805_ParseBuildTime(__DATE__,	__TIME__);
+					AM1805_SetTime(&build);
+				}
+			}
+
+		} else {
+			test_hardware_result |= _B_FAULT_AM1805_;
+		}
+	} else {
+		test_hardware_result |= _B_FAULT_DS1621_;
+		// RTC не инициализируем согласно твоей логике (не нужен без DS1621)
+	}
+
 
 	 // TERMINAL (eAssist) INITIALIZATION
 	if (!terminal_init()) {
@@ -177,16 +164,58 @@ inline uint32_t get_status_hardware(void) {
     return test_hardware_result;
 }
 
-// Check if software reset occurred (call before HAL_Init)
-inline bool get_rcc_csr(void) {
-    return __HAL_RCC_GET_FLAG(RCC_FLAG_SFTRST);
-}
 
 // Perform system reset
 void bsp_system_reset(void) {
     HAL_NVIC_SystemReset();
 }
 
+// check reset
+inline bool get_rcc_csr(void) {
+	// Проверяем флаг (макрос возвращает SET или RESET)
+	bool is_soft_reset = (__HAL_RCC_GET_FLAG(RCC_FLAG_SFTRST) != RESET);
+
+	// ОЧИЩАЕМ все флаги причин сброса!
+	// Это гарантирует, что следующая перезагрузка покажет только свежую причину.
+	__HAL_RCC_CLEAR_RESET_FLAGS();
+
+	return is_soft_reset;
+}
+
+/********************************* Точная us задержка *********************************************/
+// Инициализация DWT
+void DWT_Init(void) {
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+
+    // Разблокировка доступа к DWT (актуально для старших ядер Cortex-M)
+    // Разкомментируйте, если компилятор знает регистр LAR:
+    // DWT->LAR = 0xC5ACCE55;
+
+    DWT->CYCCNT = 0;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+}
+
+// Деинициализация DWT
+void DWT_DeInit(void) {
+    DWT->CTRL &= ~DWT_CTRL_CYCCNTENA_Msk;
+    DWT->CYCCNT = 0;
+    CoreDebug->DEMCR &= ~CoreDebug_DEMCR_TRCENA_Msk;
+}
+
+// Микросекундная блокирующая задержка
+void delay_us(uint32_t us) {
+    // Вычисляем, сколько тактов процессора нужно прождать
+    uint32_t ticks_needed = us * (SystemCoreClock / 1000000U);
+
+    // Фиксируем стартовое значение счетчика
+    uint32_t tick_start = DWT->CYCCNT;
+
+    // Ждем, пока разница не достигнет нужного количества тактов.
+    // Переполнение uint32_t обрабатывается аппаратно и безопасно!
+    while ((DWT->CYCCNT - tick_start) < ticks_needed) {
+        __NOP(); // Опционально: пустая инструкция, чтобы не сводить с ума отладчик
+    }
+}
 
 
 /********************************** WEAK INTERRUPT CALLBACK ***************************************/

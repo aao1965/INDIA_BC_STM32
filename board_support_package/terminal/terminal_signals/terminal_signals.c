@@ -52,7 +52,7 @@ SIGNALS_BEGIN(DSPA_SIGNALS_NAME)
 			_BYTE_RW_("day", set_time.day, &sTIME),
 			_BOOL_RW_("set data",run_set_data, &sTIME),
 			_STRING_R_ ("Time calibration", sTIME_CORRECTION, &sTIME),
-				_FLOAT_RW_("corr.[sec./hour](+,if the clock is slow)",ppm_rtc,&sTIME_CORRECTION ),
+				_FLOAT_RW_("corr.[sec./hour]('+' if clock is fast)",ppm_rtc,&sTIME_CORRECTION ),
 				_BOOL_RW_("set correction",run_set_correction, &sTIME_CORRECTION),
 				_BYTE_R_("BREF",  rtc_diag.bref, &sTIME_CORRECTION),
 				_BYTE_R_("CAL_XT",  rtc_diag.cal_xt, &sTIME_CORRECTION),
