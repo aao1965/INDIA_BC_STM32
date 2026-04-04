@@ -42,7 +42,15 @@ extern	DMA_HandleTypeDef 	hdma_usart1_tx;
 extern	SPI_HandleTypeDef 	hspi1;
 //	fpga misc SPI
 extern	SPI_HandleTypeDef hspi2;
+// HW CRC
+extern CRC_HandleTypeDef hcrc;
 
+typedef struct {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t fw_size;
+    uint32_t crc32;
+} fw_header_t;
 
 /* ********************************************************
  * test	fault bits  */
@@ -67,11 +75,12 @@ uint32_t 	init_hardware(void);
 bool 		test_status_hardware(uint32_t module);
 uint32_t 	get_status_hardware(void);
 
-bool		get_rcc_csr(void);
-void		bsp_system_reset(void);
+bool	get_rcc_csr(void);
+void	bsp_system_reset(void);
+void 	jump_main_application(uint32_t addr);
 
-void DWT_Init(void);
-void DWT_DeInit(void);
-void delay_us(uint32_t us);
+void	DWT_Init(void);
+void	DWT_DeInit(void);
+void	delay_us(uint32_t us);
 
 #endif /* BOARD_SUPPORT_PACKAGE_H_ */

@@ -12,8 +12,9 @@
 #include 	"rgb_led.h"
 #include 	"led_blink.h"
 #include	"terminal_signals.h"
+#include    "application.h"  // ДОБАВЛЕНО: драйвер внутренней памяти
 
-/* 	main terminal uart */
+/* main terminal uart */
 Uart_ctrl_t	uctrl;
 
 /* dspa  main func. */
@@ -21,6 +22,7 @@ static	PROG_Config_t	PROG_Config;
 static	SYS_Config_t  	SYS_Config;
 
 static 	bool reset_request=	false;
+static 	bool fl_stay_here=		false;
 static 	int	handle;
 
 static	char* uint32_to_string(uint32_t n, char* buffer, size_t buffer_size) ;
@@ -47,23 +49,33 @@ static void		prg_Reset(const du8 dev_num);
 static dboolean prg_Finish(const du8 dev_num);
 
 
-/* device descriptod */
+/* device descriptor */
 Dev_descriptor_t dev_descr_arr[_ID_DEV_NUM] =
 {
-
 	{
-	//	FLASH
+	//	FLASH FPGA
 		"DD4-W25Q16JV/M_ID=",
 		W25Q16_PAGE_SIZE,
 		W25Q16_PAGE_SIZE,
-		//DSPA_CFG_READ_PAGE_SIZE,
 		_TERMINAL_FPFA_MAX_NUM_BLOCK_*W25Q16_BLOCK_SIZE,
 		W25Q16_TIMEOUT_CHIP_WRITE_S,
 		W25Q16_TIMEOUT_CHIP_ERASE_S,
 		dtrue,
 		0,
 		0
-		}
+	},
+	{
+	//	Внутренняя память CPU (ДОБАВЛЕНО)
+		"DD11-STM32F415ZGTX/ID=",
+		FLASH_CPU_PAGE_SIZE,     // 1024
+		FLASH_CPU_PAGE_SIZE,     // 1024
+		FLASH_CPU_SIZE,          // Задается в application.h
+		2,                       // Timeout write (sec)
+		6,                       // Timeout erase (sec) - увеличено для секторов
+		dfalse,
+		FLASH_CPU_START_ADDRESS,
+		FLASH_CPU_START_ADDRESS
+	}
 };
 
 
@@ -148,8 +160,23 @@ void terminal_task(void) {
 		bsp_system_reset();
 	}
 
-	led_blink();
 
+	// Если время вышло И нет команды "оставаться здесь" -> прыгаем в приложение
+	static uint32_t tick_old = 0;
+	if (((osKernelGetTickCount() - tick_old) > _TERMINAL_TIMEOUT_MS_) && !fl_stay_here) {
+#ifdef	_PERMISSION_JUMP_APPL_
+		fl_stay_here=	true;
+		//jump_main_application(APPLICATION_ADDRESS);
+
+		// Проверяем: если прошивка живая - прыгаем
+		if (check_application() == true) {
+			jump_main_application(APPLICATION_ADDRESS);
+		}
+
+#endif
+	}
+
+	led_blink();
 	osDelay(_TERMINAL_TASK_TICK_);
 }
 
@@ -160,7 +187,7 @@ void	terminal_telemetry_handler(void){
 }
 
 /**************************************************************************************************
- *  terminal communication functionS
+ * terminal communication functionS
  *************************************************************************************************/
 //	Translate data -> UART
 static int Send(unsigned char *const buf, const unsigned int num) {
@@ -168,6 +195,8 @@ static int Send(unsigned char *const buf, const unsigned int num) {
 	if (get_state_led()==LED_STATE_BLINK_WHITE){
 	//	set_state_led(LED_STATE_BREATH_WHITE);	//	LED_STATE_RG_OFF
 		set_state_led(LED_STATE_RG_OFF);	//
+		fl_stay_here=	true;
+
 	}
 	com_send(&uctrl, buf, num);
 	return num;
@@ -225,7 +254,7 @@ static char* sys_SelfTest(void){
 
 
 /**************************************************************************************************
- *  main programming functions
+ * main programming functions
  *************************************************************************************************/
 //	read ID
 static du32 prg_ReadId(const du8 dev_num) {
@@ -234,6 +263,10 @@ static du32 prg_ReadId(const du8 dev_num) {
 	switch (dev_num) {
 	case _ID_FPGA_FLASH:{
 		t=	(uint32_t)DD15.manufacturer_id;
+		break;
+	}
+	case _ID_CPU_MEMORY: {
+		t = HAL_GetDEVID(); // Чтение ID контроллера STM32
 		break;
 	}
 	default:	break;
@@ -249,6 +282,11 @@ static dboolean prg_Read(const du8 dev_num, du8 *const pusData,	const du32 ulSta
 	case _ID_FPGA_FLASH:{
 		SPI_Bus_Acquire_For_STM32();
 		result=	(W25Q16_ReadData(&DD15, ulStartAddress, pusData, W25Q16_PAGE_SIZE)==osOK);
+		break;
+	}
+	case _ID_CPU_MEMORY: {
+		eeprom_memory_read_buffer(pusData, (const uint8_t*)ulStartAddress, dev_descr_arr[_ID_CPU_MEMORY].cnt_rd_block);
+		result = dtrue;
 		break;
 	}
 	default:	break;
@@ -272,8 +310,15 @@ static dboolean prg_Erase(const du8 dev_num) {
 				return	dfalse;
 			}
 		}
-
 		result=	dtrue;
+		break;
+	}
+	case _ID_CPU_MEMORY: {
+		result = dtrue;
+		// Умное стирание секторов (начиная с APPL_SECTOR) 
+		for (uint32_t i = 0; i < FLASH_CPU_SECTORS_COUNT; i++) {
+			result &= eeprom_memory_erase(APPL_SECTOR + i);
+		}
 		break;
 	}
 	default:	break;
@@ -290,6 +335,12 @@ static dboolean prg_Write(const du8 dev_num, du8 *const pusData,	const du32 ulSt
 		result =(W25Q16_PageProgram(&DD15, ulStartAddress, pusData, W25Q16_PAGE_SIZE) == osOK);
 		break;
 	}
+	case _ID_CPU_MEMORY: {
+		uint32_t bytes_to_write = dev_descr_arr[_ID_CPU_MEMORY].cnt_wr_block;
+		uint32_t words_to_write = bytes_to_write >> 2; // байты -> слова
+		result = eeprom_memory_write_words((uint32_t*)pusData, ulStartAddress, words_to_write);
+		break;
+	}
 	default:	break;
 	}
 	return result;
@@ -298,10 +349,18 @@ static dboolean prg_Write(const du8 dev_num, du8 *const pusData,	const du32 ulSt
 
 //	reset
 static void prg_Reset(const du8 dev_num) {
-
-	//jump_main_application(SELF_APPL_ADDRESS);
-	SPI_Bus_Release_To_FPGA();
-	FPGA_Reset();
+	switch (dev_num) {
+	case _ID_FPGA_FLASH: {
+		SPI_Bus_Release_To_FPGA();
+		FPGA_Reset();
+		break;
+	}
+	case _ID_CPU_MEMORY: {
+		// Ничего специфичного сбрасывать не нужно
+		break;
+	}
+	default:	break;
+	}
 }
 
 
@@ -311,12 +370,15 @@ static dboolean prg_Finish(const du8 dev_num) {
 	dboolean result = dfalse;
 	switch (dev_num) {
 	case _ID_FPGA_FLASH: {
-
 		set_state_led(LED_STATE_RG_OFF);
-
 		SPI_Bus_Release_To_FPGA();
 		FPGA_Reset();
 		result=	true;
+		break;
+	}
+	case _ID_CPU_MEMORY: {
+		set_state_led(LED_STATE_RG_OFF);
+		result = dtrue;
 		break;
 	}
 	default:
@@ -327,7 +389,7 @@ static dboolean prg_Finish(const du8 dev_num) {
 }
 
 /**************************************************************************************************
- *  auxiliary functions
+ * auxiliary functions
  *************************************************************************************************/
 
 /* uint32_t ->string */
@@ -352,8 +414,3 @@ static char* uint32_to_string(uint32_t n, char *buffer, size_t buffer_size) {
 	buffer[j] = '\0';
 	return buffer;
 }
-
-
-
-
-

@@ -182,6 +182,61 @@ inline bool get_rcc_csr(void) {
 	return is_soft_reset;
 }
 
+
+void jump_main_application(uint32_t addr) {
+    void (*Jump_To_Application)(void);
+    uint32_t JumpAddress;
+
+    // Читаем значение Stack Pointer из начала прошивки
+        uint32_t stack_pointer = *(__IO uint32_t*)addr;
+
+        // Проверяем, что стек лежит в SRAM (0x20xxxxxx) или в CCMRAM (0x10xxxxxx)
+        if (((stack_pointer & 0xFF000000) == 0x20000000) ||
+            ((stack_pointer & 0xFF000000) == 0x10000000)) {
+
+    // 1. СНАЧАЛА ПРОВЕРЯЕМ: есть ли по адресу валидная прошивка?
+    // Проверяем, что по адресу лежит указатель на стек (в RAM STM32)
+    //if (((*(__IO uint32_t*)addr) & 0x2FFE0000) == 0x20000000) {
+
+         // ПРОШИВКА ЕСТЬ! Теперь можно безопасно "ломать" среду бутлоадера.
+
+        // 2. Останавливаем планировщик RTOS
+        osKernelLock();
+
+        // 3. Сбрасываем всю периферию STM32
+        HAL_RCC_DeInit();
+        HAL_DeInit();
+
+        // 4. ЖЕСТКО выключаем SysTick
+        SysTick->CTRL = 0;
+        SysTick->LOAD = 0;
+        SysTick->VAL  = 0;
+
+        // 5. Запрещаем все прерывания ядра перед прыжком
+        __disable_irq();
+
+        // 6. Вычисляем адрес прыжка
+        JumpAddress = *(__IO uint32_t*) (addr + 4);
+        Jump_To_Application = (void (*)(void)) JumpAddress;
+
+        // 7. Устанавливаем Main Stack Pointer (MSP) для новой прошивки
+        __set_MSP(*(__IO uint32_t*) addr);
+
+        // 8. Прыжок веры! (Отсюда возврата нет)
+        Jump_To_Application();
+    }
+    else {
+        // ПРОШИВКИ НЕТ! (или память стерта)
+        // Мы попадаем сюда, и при этом мы ничего не сломали.
+        // RTOS работает, прерывания включены, HAL активен.
+
+        // Здесь можно безопасно обработать ошибку:
+        // - Запустить мигание красным светодиодом ошибки
+        // - Выдать строку "No App!" в UART
+        // - Запустить USB/UART загрузчик (XMODEM/YMODEM) для приема файла
+    }
+}
+
 /********************************* Точная us задержка *********************************************/
 // Инициализация DWT
 void DWT_Init(void) {

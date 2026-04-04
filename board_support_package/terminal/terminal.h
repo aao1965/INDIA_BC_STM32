@@ -1,9 +1,12 @@
-
-
 #ifndef TERMINAL_H_
 #define TERMINAL_H_
 
 #include	"board_support_package.h"
+
+
+// terminal.h
+#define 	_TERMINAL_TIMEOUT_MS_       5000        // Тайм-аут 5 секунд
+#define		_PERMISSION_JUMP_APPL_		1
 
 #define		_TERMINAL_PERMISSION_WRAPPER_
 
@@ -24,7 +27,8 @@
 
 //	memory identifiers
 #define		_ID_FPGA_FLASH			0x00
-#define		_ID_DEV_NUM				1
+#define		_ID_CPU_MEMORY			0x01		// ДОБАВЛЕНО: ID внутренней памяти CPU
+#define		_ID_DEV_NUM				2			// ИЗМЕНЕНО: теперь у нас 2 устройства
 
 /*
  *		eAssist max = 1024 !!!!!
@@ -38,7 +42,5 @@
 bool	terminal_init(void);
 void	terminal_task(void);
 void	terminal_telemetry_handler(void);
-
-
 
 #endif /* TERMINAL_H_ */
