@@ -28,7 +28,8 @@
 //	memory identifiers
 #define		_ID_FPGA_FLASH			0x00
 #define		_ID_CPU_MEMORY			0x01		// ДОБАВЛЕНО: ID внутренней памяти CPU
-#define		_ID_DEV_NUM				2			// ИЗМЕНЕНО: теперь у нас 2 устройства
+#define		_ID_FRAM_RECORDER		0x02		// ID самописца во FRAM (TERMINAL_ID_FRAM_RECORDER)
+#define		_ID_DEV_NUM				3			// ИЗМЕНЕНО: теперь у нас3 устройства
 
 /*
  *		eAssist max = 1024 !!!!!

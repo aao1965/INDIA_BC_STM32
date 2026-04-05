@@ -13,6 +13,8 @@
 #include 	"led_blink.h"
 #include	"terminal_signals.h"
 #include    "application.h"  // ДОБАВЛЕНО: драйвер внутренней памяти
+#include 	"fm22l16.h"
+#include	"fram_recorder.h"
 
 /* main terminal uart */
 Uart_ctrl_t	uctrl;
@@ -75,6 +77,18 @@ Dev_descriptor_t dev_descr_arr[_ID_DEV_NUM] =
 		dfalse,
 		FLASH_CPU_START_ADDRESS,
 		FLASH_CPU_START_ADDRESS
+	},
+	{
+//	[2] FRAM Самописец (_ID_FRAM_RECORDER = 0x02)
+		"DD17-FM22L16/ID=",
+		FRAM_RECORDER_BLOCK_SIZE, // Передаем 1024 байта при записи
+		FRAM_RECORDER_BLOCK_SIZE, // Передаем 1024 байта при чтении
+		FRAM_RECORDER_SIZE_BYTES, // 65536
+		2,
+		2,
+		dfalse,
+		FRAM_RECORDER_START_ADDRESS, // Указываем реальный адрес: 0x38000
+		FRAM_RECORDER_START_ADDRESS
 	}
 };
 
@@ -269,6 +283,12 @@ static du32 prg_ReadId(const du8 dev_num) {
 		t = HAL_GetDEVID(); // Чтение ID контроллера STM32
 		break;
 	}
+	case _ID_FRAM_RECORDER: {
+		// Параллельная FRAM не имеет простого регистра ID.
+		// Возвращаем фиксированную "магическую" константу 0x2216 для терминала.
+		t = 0x2216;
+		break;
+	}
 	default:	break;
 	}
 
@@ -289,6 +309,27 @@ static dboolean prg_Read(const du8 dev_num, du8 *const pusData,	const du32 ulSta
 		result = dtrue;
 		break;
 	}
+	case _ID_FRAM_RECORDER: {
+			uint32_t block_bytes = dev_descr_arr[_ID_FRAM_RECORDER].cnt_rd_block;
+			uint32_t words_to_read = block_bytes / 2;
+
+			// 1. Вычисляем смещение в БАЙТАХ от начала блока (0, 1024, 2048...)
+			uint32_t byte_offset = ulStartAddress - FRAM_RECORDER_START_ADDRESS;
+
+			// 2. Переводим байтовое смещение в словное (/ 2) и прибавляем к стартовому адресу FSMC
+			uint32_t current_word_addr = FRAM_RECORDER_START_ADDRESS + (byte_offset / 2);
+
+			// Защита от выхода за пределы физической памяти FRAM
+			if ((current_word_addr + words_to_read) > (FRAM_RECORDER_END_ADDRESS + 1)) {
+				words_to_read = (FRAM_RECORDER_END_ADDRESS + 1) - current_word_addr;
+			}
+
+			// Читаем правильный блок по правильному адресу!
+			if (fsmc_read_buffer(FSMC_DEV_FRAM, current_word_addr, (uint16_t*)pusData, words_to_read) == FSMC_OK) {
+				result = dtrue;
+			}
+			break;
+		}
 	default:	break;
 	}
 	return result;
@@ -321,6 +362,11 @@ static dboolean prg_Erase(const du8 dev_num) {
 		}
 		break;
 	}
+	case _ID_FRAM_RECORDER: {
+		result = dfalse;
+		break;
+	}
+
 	default:	break;
 	}
 	return result;
@@ -339,6 +385,12 @@ static dboolean prg_Write(const du8 dev_num, du8 *const pusData,	const du32 ulSt
 		uint32_t bytes_to_write = dev_descr_arr[_ID_CPU_MEMORY].cnt_wr_block;
 		uint32_t words_to_write = bytes_to_write >> 2; // байты -> слова
 		result = eeprom_memory_write_words((uint32_t*)pusData, ulStartAddress, words_to_write);
+		break;
+	}
+	case _ID_FRAM_RECORDER: {
+		// Блокируем запись со стороны терминала!
+		// Возвращаем 0, чтобы программа на ПК поняла, что данные не записаны.
+		result = dfalse;
 		break;
 	}
 	default:	break;
@@ -381,6 +433,11 @@ static dboolean prg_Finish(const du8 dev_num) {
 		result = dtrue;
 		break;
 	}
+	case _ID_FRAM_RECORDER:{
+		result = dtrue;
+		break;
+	}
+
 	default:
 		break;
 	}
