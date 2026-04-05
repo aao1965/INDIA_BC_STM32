@@ -89,6 +89,10 @@ void Error_Handler(void);
 #define UART_RX_KPA_GPIO_Port GPIOA
 #define STLINK_GND_Pin GPIO_PIN_7
 #define STLINK_GND_GPIO_Port GPIOB
+#define I2C1_SCL_DS1621_Pin GPIO_PIN_8
+#define I2C1_SCL_DS1621_GPIO_Port GPIOB
+#define I2C1_SDA_DS1621_Pin GPIO_PIN_9
+#define I2C1_SDA_DS1621_GPIO_Port GPIOB
 #define TP0_Pin GPIO_PIN_0
 #define TP0_GPIO_Port GPIOE
 #define TP1_Pin GPIO_PIN_1

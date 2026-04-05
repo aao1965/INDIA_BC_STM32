@@ -8,8 +8,17 @@
 #include "board_support_package.h"
 
 /* --- Configuration --- */
-/* Uncomment to use DONE bit polling instead of a fixed 800ms delay */
+/* Выбор режима работы: 1 - Continuous (Непрерывный, по умолчанию), 0 - One-Shot (Одиночный) */
+#define DS1621_MODE_CONTINUOUS    1
+
+/* Использовать опрос бита DONE вместо фиксированной задержки 800мс (работает только в режиме One-Shot) */
 #define DS1621_USE_DONE_POLLING   1 
+
+/* --- I2C Hardware Pins --- */
+#define I2C1_SCL_DS1621_Pin       GPIO_PIN_8
+#define I2C1_SCL_DS1621_GPIO_Port GPIOB
+#define I2C1_SDA_DS1621_Pin       GPIO_PIN_9
+#define I2C1_SDA_DS1621_GPIO_Port GPIOB
 
 #define DS1621_BIT_1SHOT        0x01
 #define DS1621_ADDR             (0x48 << 1)
@@ -41,33 +50,32 @@ typedef enum {
 bool          DS1621_Init(I2C_HandleTypeDef *hi2c_ptr);
 
 /**
- * @brief Perform one measurement cycle (Start -> Wait/Poll -> Read).
+ * @brief Perform one measurement cycle or read instantly based on mode.
  * @return Status code
  */
 DS1621_Status DS1621_Update(void);
 
 /**
  * @brief Calculate high-resolution temperature from registers.
- * @param temperature Pointer to store the result
+ * @param out_temp Pointer to float to store the result
  * @return Status code
  */
-DS1621_Status DS1621_GetTemperatureHighRes(float *temperature);
+DS1621_Status DS1621_GetTemperatureHighRes(float *out_temp);
 
 /**
- * @brief Thread-safe getter for the last valid temperature.
- * @return Last measured temperature in Celsius
+ * @brief Returns the last successfully measured temperature.
  */
 float         DS1621_GetLastTemperature(void);
 
-/* Shared Resource Access */
 /**
- * @brief Returns the mutex handle to allow sharing the I2C bus with AM1805.
- * @return Mutex ID
+ * @brief Returns the mutex handle for sharing the bus with other devices like AM1805.
  */
 osMutexId_t   DS1621_GetI2CMutex(void);
 
-/* Task Management */
+/**
+ * @brief Создает задачу RTOS для периодического опроса датчика.
+ * @return osThreadId_t Хэндл созданной задачи (или NULL при ошибке).
+ */
 osThreadId_t  DS1621_CreateTask(void);
 
 #endif /* DS1621_H */
-

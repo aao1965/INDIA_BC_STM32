@@ -73,4 +73,6 @@ AM1805_Time_t AM1805_ParseBuildTime(const char* date, const char* time);
  * @param password Должен быть равен 0x55AA3C0F для выполнения.
  */
 bool AM1805_ForceInit(I2C_HandleTypeDef *hi2c_ptr, osMutexId_t mutex_id, uint32_t password);
+bool AM1805_ResetAndForceInit(I2C_HandleTypeDef *hi2c_ptr, osMutexId_t mutex_id, uint32_t password);
+
 #endif

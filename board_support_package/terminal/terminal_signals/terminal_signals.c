@@ -11,6 +11,7 @@
 #include	"terminal_signals.h"
 
 #include 	"am1805.h"
+#include 	"ds1621.h"
 #include	"fm22l16.h"
 #include 	"led_blink.h"
 
@@ -35,6 +36,7 @@ static	AM1805_Time_t set_time={
 static	bool	run_set_data=	false;
 static	float  	ppm_rtc= 0;
 static	bool	run_set_correction=	false;
+static  bool	reset_1805= false;
 static 	bool	run_fm22l16_full_test= false;
 static  bool 	status_fm22l16_test= false;
 
@@ -60,6 +62,7 @@ SIGNALS_BEGIN(DSPA_SIGNALS_NAME)
 				_BYTE_R_("OSC CTRL",  rtc_diag.osc_ctrl, &sTIME_CORRECTION),
 				_BYTE_R_("OSC STATUS",  rtc_diag.osc_stat, &sTIME_CORRECTION),
 				_BYTE_R_("STATUS",  rtc_diag.status, &sTIME_CORRECTION),
+				_BOOL_RW_("reset AM1805",reset_1805, &sTIME_CORRECTION),
 	_STRING_R_  ("Debug section", sDEBUG, NULL),
 		_STRING_R_("W25Q16JVSSIQ", sFLASH, &sDEBUG),
 			_BYTE_R_("JDECID0", DD15.manufacturer_id,&sFLASH),
@@ -92,6 +95,14 @@ void signal_change_handler(void *s) {
 	if (s==&run_set_correction){
 		run_set_correction=	false;
 		AM1805_SetCalibrationByDrift(ppm_rtc);
+	}
+
+	// reset 1805
+	if (s== &reset_1805){
+		reset_1805= false;
+
+		AM1805_ForceInit(&hi2c1, DS1621_GetI2CMutex(), 0x55AA3C0F);
+		AM1805_GetDiagnostics(&rtc_diag);
 	}
 
 	// полный тест

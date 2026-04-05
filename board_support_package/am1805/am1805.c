@@ -223,6 +223,10 @@ bool AM1805_ForceInit(I2C_HandleTypeDef *hi2c_ptr, osMutexId_t mutex_id, uint32_
     ctrl1 &= ~(0x01 | AM1805_CTRL1_24H); 
     if (i2c_transfer(AM1805_REG_CTRL1, &ctrl1, 1, false) != AM1805_OK) return false;
 
+    // 6. Жесткая очистка Control1 (сброс PWR2, OUT, WRTC и установка режима 24h)
+	/*ctrl1 = 0x00;
+	if (i2c_transfer(AM1805_REG_CTRL1, &ctrl1, 1, false) != AM1805_OK)	return false;*/
+
     return true;
 }
 
@@ -242,25 +246,23 @@ AM1805_Status AM1805_SoftwareReset(void) {
     return status;
 }
 
-/*
-*
- * @brief Настройка калибровки по реальному уходу времени.
+/**
+ * @brief Полный цикл восстановления: программный сброс + принудительная настройка.
+ */
+bool AM1805_ResetAndForceInit(I2C_HandleTypeDef *hi2c_ptr, osMutexId_t mutex_id, uint32_t password) {
+    // 1. Инициализируем указатели ПЕРЕД сбросом, иначе i2c_transfer не сработает
+    p_hi2c = hi2c_ptr;
+    i2c_mutex = mutex_id;
 
-AM1805_Status AM1805_SetCalibrationByDrift(float drift_sec_per_hour) {
-    const float LSB_IN_SEC_PER_HOUR = 0.0073242f;
+    // 2. Делаем программный сброс (чистим Control1 и Status)
+    if (AM1805_SoftwareReset() != AM1805_OK) {
+        return false;
+    }
 
-    int16_t cal_val = (int16_t)(-drift_sec_per_hour / LSB_IN_SEC_PER_HOUR);
-
-    if (cal_val > 63) cal_val = 63;
-    else if (cal_val < -64) cal_val = -64;
-
-    uint8_t data = (uint8_t)((int8_t)cal_val & 0x7F);
-    uint8_t key = AM1805_KEY_CONF;
-
-    if (i2c_transfer(AM1805_REG_KEY, &key, 1, false) != AM1805_OK) return AM1805_ERROR;
-    return i2c_transfer(AM1805_REG_CAL_XT, &data, 1, false);
+    // 3. Запускаем жесткую инициализацию с проверкой пароля
+    return AM1805_ForceInit(hi2c_ptr, mutex_id, 0x55AA3C0F);
 }
-*/
+
 /**
  * @brief Настройка калибровки по реальному уходу времени с автовыбором режима.
  * * @param drift_sec_per_hour Уход часов в секундах за 1 час.
