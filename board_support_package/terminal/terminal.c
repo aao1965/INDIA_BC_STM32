@@ -178,7 +178,7 @@ void terminal_task(void) {
 	// Если время вышло И нет команды "оставаться здесь" -> прыгаем в приложение
 	static uint32_t tick_old = 0;
 	if (((osKernelGetTickCount() - tick_old) > _TERMINAL_TIMEOUT_MS_) && !fl_stay_here) {
-#ifdef	_PERMISSION_JUMP_APPL_
+#ifdef	_TERMINAL_PERMISSION_JUMP_APPL_
 		fl_stay_here=	true;
 		//jump_main_application(APPLICATION_ADDRESS);
 

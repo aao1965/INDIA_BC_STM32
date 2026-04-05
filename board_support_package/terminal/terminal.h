@@ -5,8 +5,8 @@
 
 
 // terminal.h
-#define 	_TERMINAL_TIMEOUT_MS_       5000        // Тайм-аут 5 секунд
-//#define		_PERMISSION_JUMP_APPL_		1
+#define 	_TERMINAL_TIMEOUT_MS_       		5000        // Тайм-аут 5 секунд
+#define		_TERMINAL_PERMISSION_JUMP_APPL_		1
 
 #define		_TERMINAL_PERMISSION_WRAPPER_
 
