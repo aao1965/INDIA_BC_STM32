@@ -5,18 +5,16 @@
 static I2C_HandleTypeDef *p_hi2c = NULL;
 static osMutexId_t i2c_mutex = NULL;
 
-/* Вспомогательные функции конвертации BCD <-> DEC */
-static uint8_t bcd2dec(uint8_t bcd) { return ((bcd >> 4) * 10) + (bcd & 0x0F); }
-static uint8_t dec2bcd(uint8_t dec) { return ((dec / 10) << 4) | (dec % 10); }
+/* Вспомогательные макросы BCD */
+static inline uint8_t bcd2dec(uint8_t bcd) { return ((bcd >> 4) * 10) + (bcd & 0x0F); }
+static inline uint8_t dec2bcd(uint8_t dec) { return ((dec / 10) << 4) | (dec % 10); }
 
-/**
- * @brief Низкоуровневая передача данных по I2C с блокировкой мьютекса.
- */
 static AM1805_Status i2c_transfer(uint8_t reg, uint8_t *pData, uint16_t size, bool is_read) {
     if (p_hi2c == NULL) return AM1805_ERROR;
     
-    // Пытаемся захватить мьютекс шины, если он передан
-    if (i2c_mutex != NULL && osMutexAcquire(i2c_mutex, AM1805_MUTEX_TIMEOUT) != osOK) return AM1805_BUSY;
+    if (i2c_mutex != NULL && osMutexAcquire(i2c_mutex, AM1805_MUTEX_TIMEOUT) != osOK) {
+        return AM1805_BUSY;
+    }
 
     HAL_StatusTypeDef res = is_read ? 
         HAL_I2C_Mem_Read(p_hi2c, AM1805_ADDR, reg, 1, pData, size, AM1805_I2C_TIMEOUT) :
@@ -26,71 +24,53 @@ static AM1805_Status i2c_transfer(uint8_t reg, uint8_t *pData, uint16_t size, bo
     return (res == HAL_OK) ? AM1805_OK : AM1805_ERROR;
 }
 
-/**
- * @brief Умная инициализация. Проверяет, идут ли часы и исправен ли кварц.
- */
 bool AM1805_Init_Smart(I2C_HandleTypeDef *hi2c_ptr, osMutexId_t mutex_id) {
     p_hi2c = hi2c_ptr;
     i2c_mutex = mutex_id;
     uint8_t data, key, ctrl1, osc_stat;
 
-    // Проверяем физическое наличие чипа на шине
     if (HAL_I2C_IsDeviceReady(p_hi2c, AM1805_ADDR, 5, AM1805_I2C_TIMEOUT) != HAL_OK) return false;
 
-    // ШАГ 1: Читаем статус WRTC (0x10) и статус генератора OF (0x1D)
     if (i2c_transfer(AM1805_REG_CTRL1, &ctrl1, 1, true) != AM1805_OK) return false;
     if (i2c_transfer(AM1805_REG_OSC_STAT, &osc_stat, 1, true) != AM1805_OK) return false;
 
-    /**
-     * ЛОГИКА ПРОПУСКА ИНИЦИАЛИЗАЦИИ:
-     * 1. (ctrl1 & 0x01) == 0  => Бит WRTC сброшен. Значит, мы уже настраивали чип ранее.
-     * 2. (osc_stat & 0x02) == 0 => Бит OF (Oscillator Failure) чист. Кварц работает стабильно.
-     */
+    // Пропуск настройки, если часы уже запущены (WRTC=0) и нет сбоев генератора (OF=0)
     if (((ctrl1 & 0x01) == 0) && ((osc_stat & 0x02) == 0)) {
         return true; 
     }
 
-    // --- ХОЛОДНЫЙ СТАРТ / СБОЙ КВАРЦА ---
-
-    // ШАГ 2: Сброс флага ошибки генератора (OF) в 0x1D.
-    // Ключ не нужен!
+    // Сброс флага OF
     data = 0x00;
     if (i2c_transfer(AM1805_REG_OSC_STAT, &data, 1, false) != AM1805_OK) return false;
 
-    // ШАГ 3: Принудительный выбор XT (кварцевого) генератора (0x1C).
-    // Нужен ключ 0xA1.
-    key = 0xA1; // AM1805_KEY_OSC
+    // Включение XT кварца (0x1C)
+    key = AM1805_KEY_OSC;
     if (i2c_transfer(AM1805_REG_KEY, &key, 1, false) != AM1805_OK) return false;
-    data = 0x00; // OSEL = 0 включает 32.768 kHz XT кварц
+    data = 0x00;
     if (i2c_transfer(AM1805_REG_OSC_CTRL, &data, 1, false) != AM1805_OK) return false;
 
-    // ШАГ 4: Настройка порога переключения на батарею (BREF, 0x21).
-    // Нужен ключ 0x9D.
-    key = AM1805_KEY_CONF; // 0x9D
+    // BREF = 2.1V (0x21)
+    key = AM1805_KEY_CONF;
     if (i2c_transfer(AM1805_REG_KEY, &key, 1, false) != AM1805_OK) return false;
-    data = 0xB0; // Установка порога 2.1V для переключения питания
+    data = 0xB0;
     if (i2c_transfer(AM1805_REG_BREF, &data, 1, false) != AM1805_OK) return false;
 
-    // ШАГ 5: Разрешение работы интерфейса I2C при питании от батареи (BATMODE_IO, 0x27).
-    // Замок закрылся на предыдущем шаге! СНОВА отправляем ключ 0x9D.
-    key = AM1805_KEY_CONF; // 0x9D
+    // BATMODE_IO: IOBM = 1 (0x27)
+    key = AM1805_KEY_CONF;
     if (i2c_transfer(AM1805_REG_KEY, &key, 1, false) != AM1805_OK) return false;
-    data = 0x80; // IOBM = 1 позволяет "будить" чип по шине
+    data = 0x80;
     if (i2c_transfer(AM1805_REG_BATMODE_IO, &data, 1, false) != AM1805_OK) return false;
 
-    // ШАГ 6: Финальный запуск: сброс WRTC и установка 24-часового режима (0x10).
-    // Регистр Control1 не защищен, ключ не нужен.
+    // Запуск счета: сброс WRTC, режим 24h (0x10)
     ctrl1 &= ~(0x01 | 0x40);
     if (i2c_transfer(AM1805_REG_CTRL1, &ctrl1, 1, false) != AM1805_OK) return false;
 
     return true;
 }
-/**
- * @brief Чтение текущего времени и статуса генератора.
- */
+
 AM1805_Status AM1805_GetTime(AM1805_Time_t *time) {
     uint8_t buffer[8], osc_stat;
-    // Читаем пачку регистров времени (0x00 - 0x07) за один раз
+
     if (i2c_transfer(AM1805_REG_HUNDREDTHS, buffer, 8, true) != AM1805_OK) return AM1805_ERROR;
     if (i2c_transfer(AM1805_REG_OSC_STAT, &osc_stat, 1, true) != AM1805_OK) return AM1805_ERROR;
 
@@ -103,25 +83,19 @@ AM1805_Status AM1805_GetTime(AM1805_Time_t *time) {
     time->year       = 2000 + bcd2dec(buffer[6]);
     time->weekday    = buffer[7] & 0x07;
     
-    // Проверка бита XPF (бит 5): 1 = работает именно кварц (XT)
-   // time->is_xt_active = (osc_stat & 0x20) ? true : false;
-    // Проверка бита XPF (бит 4): 0 = работает именно кварц (XT)
+    // XPF (бит 4): 0 = активен XT
     time->is_xt_active = (osc_stat & 0x10) ? false : true;
 
     return AM1805_OK;
 }
 
-/**
- * @brief Установка времени с использованием паттерна Read-Modify-Write.
- */
 AM1805_Status AM1805_SetTime(AM1805_Time_t *time) {
     uint8_t buffer[8], ctrl1;
     AM1805_Status status;
     
-    // Сначала читаем текущий CTRL1, чтобы не затереть другие настройки (например, прерывания)
     if ((status = i2c_transfer(AM1805_REG_CTRL1, &ctrl1, 1, true)) != AM1805_OK) return status;
 
-    ctrl1 |= 0x01; // Устанавливаем WRTC=1 (разрешаем запись в регистры времени)
+    ctrl1 |= 0x01; // WRTC=1
     if ((status = i2c_transfer(AM1805_REG_CTRL1, &ctrl1, 1, false)) != AM1805_OK) return status;
 
     buffer[0] = dec2bcd(time->hundredths);
@@ -133,45 +107,39 @@ AM1805_Status AM1805_SetTime(AM1805_Time_t *time) {
     buffer[6] = dec2bcd(time->year % 100);
     buffer[7] = time->weekday & 0x07;
 
-    // Пишем всё время пачкой
     if ((status = i2c_transfer(AM1805_REG_HUNDREDTHS, buffer, 8, false)) != AM1805_OK) return status;
 
-    ctrl1 &= ~0x01; // Сбрасываем WRTC=0 (запускаем счет и блокируем запись)
+    ctrl1 &= ~0x01; // WRTC=0
     return i2c_transfer(AM1805_REG_CTRL1, &ctrl1, 1, false);
 }
 
-/**
- * @brief Чтение диагностических регистров в структуру.
- */
 AM1805_Status AM1805_GetDiagnostics(AM1805_Diag_t *diag) {
     AM1805_Status status;
-    if ((status = i2c_transfer(AM1805_REG_CAL_XT, &diag->cal_xt, 1, true)) != AM1805_OK) return status;
-    if ((status = i2c_transfer(AM1805_REG_OSC_CTRL, &diag->osc_ctrl, 1, true)) != AM1805_OK) return status;
-    if ((status = i2c_transfer(AM1805_REG_BREF, &diag->bref, 1, true)) != AM1805_OK) return status;
+
     if ((status = i2c_transfer(AM1805_REG_STATUS, &diag->status, 1, true)) != AM1805_OK) return status;
     if ((status = i2c_transfer(AM1805_REG_CTRL1, &diag->ctrl1, 1, true)) != AM1805_OK) return status;
+    if ((status = i2c_transfer(AM1805_REG_CAL_XT, &diag->cal_xt, 1, true)) != AM1805_OK) return status;
+    if ((status = i2c_transfer(AM1805_REG_OSC_CTRL, &diag->osc_ctrl, 1, true)) != AM1805_OK) return status;
     if ((status = i2c_transfer(AM1805_REG_OSC_STAT, &diag->osc_stat, 1, true)) != AM1805_OK) return status;
+    if ((status = i2c_transfer(AM1805_REG_BREF, &diag->bref, 1, true)) != AM1805_OK) return status;
+    if ((status = i2c_transfer(AM1805_REG_BATMODE_IO, &diag->batmode_io, 1, true)) != AM1805_OK) return status;
+
     return AM1805_OK;
 }
 
-/**
- * @brief Разбор макросов времени компиляции __DATE__ и __TIME__.
- */
 AM1805_Time_t AM1805_ParseBuildTime(const char* date, const char* time) {
     AM1805_Time_t t = {0};
     char m_str[4]; 
     int d, y, h, mn, s;
 
-    // Парсим "HH:MM:SS"
     sscanf(time, "%d:%d:%d", &h, &mn, &s);
     t.hours = h; t.minutes = mn; t.seconds = s;
 
-    // Парсим "Mmm DD YYYY"
     sscanf(date, "%3s %d %d", m_str, &d, &y);
     t.day = d; t.year = y;
 
     const char* months[] = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
-    t.month = 1; // Защита от некорректного парсинга
+    t.month = 1;
     for (int i = 0; i < 12; i++) {
         if (strncmp(m_str, months[i], 3) == 0) { 
             t.month = i + 1; 
@@ -182,50 +150,33 @@ AM1805_Time_t AM1805_ParseBuildTime(const char* date, const char* time) {
     return t;
 }
 
-/**
- * @brief Принудительная настройка всех критических регистров с защитой.
- */
 bool AM1805_ForceInit(I2C_HandleTypeDef *hi2c_ptr, osMutexId_t mutex_id, uint32_t password) {
-    // Проверка "пароля" перед выполнением деструктивных или важных действий
-    if (password != 0x55AA3C0F) {
-        return false; 
-    }
+    if (password != 0x55AA3C0F) return false;
 
     p_hi2c = hi2c_ptr;
     i2c_mutex = mutex_id;
     uint8_t data, key, ctrl1;
 
-    // 1. Проверка физического присутствия чипа на шине
     if (HAL_I2C_IsDeviceReady(p_hi2c, AM1805_ADDR, 5, AM1805_I2C_TIMEOUT) != HAL_OK) return false;
 
-    // 2. Сброс флага ошибки генератора (OF) в регистре 0x1D
-    // ВНИМАНИЕ: Для регистра 0x1D (Oscillator Status) ключ НЕ НУЖЕН!
     data = 0x00; 
     if (i2c_transfer(AM1805_REG_OSC_STAT, &data, 1, false) != AM1805_OK) return false;
 
-    // 3. Выбор внешнего кварца XT (32.768 кГц) в регистре 0x1C
-    // Нужен ключ 0xA1
-    key = AM1805_KEY_OSC; // Убедитесь, что в .h он равен 0xA1
+    key = AM1805_KEY_OSC;
     if (i2c_transfer(AM1805_REG_KEY, &key, 1, false) != AM1805_OK) return false;
-    data = 0x00; // OSEL = 0 (включает XT)
+    data = 0x00;
     if (i2c_transfer(AM1805_REG_OSC_CTRL, &data, 1, false) != AM1805_OK) return false;
 
-    // 4. Установка порога переключения на батарею (BREF = 2.1V)
-    // Нужен ключ 0x9D
-    key = AM1805_KEY_CONF; // 0x9D
+    key = AM1805_KEY_CONF;
     if (i2c_transfer(AM1805_REG_KEY, &key, 1, false) != AM1805_OK) return false;
     data = 0xB0; 
     if (i2c_transfer(AM1805_REG_BREF, &data, 1, false) != AM1805_OK) return false;
 
-    // 5. Разрешение доступа по I2C при работе от батареи (IOBM)
-    // Замок закрылся после шага 4! СНОВА отправляем ключ 0x9D
-    key = AM1805_KEY_CONF; // 0x9D
+    key = AM1805_KEY_CONF;
     if (i2c_transfer(AM1805_REG_KEY, &key, 1, false) != AM1805_OK) return false;
     data = 0x80; 
     if (i2c_transfer(AM1805_REG_BATMODE_IO, &data, 1, false) != AM1805_OK) return false;
 
-    // 6. Установка режима 24h и запуск счета (сброс WRTC)
-    // Регистр Control1 (0x10) не защищен, ключ не нужен. Читаем -> Меняем -> Пишем.
     if (i2c_transfer(AM1805_REG_CTRL1, &ctrl1, 1, true) != AM1805_OK) return false;
     ctrl1 &= ~(0x01 | AM1805_CTRL1_24H); 
     if (i2c_transfer(AM1805_REG_CTRL1, &ctrl1, 1, false) != AM1805_OK) return false;
@@ -233,129 +184,67 @@ bool AM1805_ForceInit(I2C_HandleTypeDef *hi2c_ptr, osMutexId_t mutex_id, uint32_
     return true;
 }
 
-/* ========================================================================== */
-/* ВОССТАНОВЛЕННЫЕ ФУНКЦИИ                                                    */
-/* ========================================================================== */
-
-/**
- * @brief Программный сброс чипа.
- */
 AM1805_Status AM1805_SoftwareReset(void) {
     uint8_t reset_cmd = AM1805_KEY_RESET;
     AM1805_Status status = i2c_transfer(AM1805_REG_KEY, &reset_cmd, 1, false);
     osDelay(10);
+
     uint8_t clear_status = 0x00;
     i2c_transfer(AM1805_REG_STATUS, &clear_status, 1, false);
+
     return status;
 }
 
-/**
- * @brief Полный цикл восстановления: программный сброс + принудительная настройка.
- */
 bool AM1805_ResetAndForceInit(I2C_HandleTypeDef *hi2c_ptr, osMutexId_t mutex_id, uint32_t password) {
-    // 1. Инициализируем указатели ПЕРЕД сбросом, иначе i2c_transfer не сработает
     p_hi2c = hi2c_ptr;
     i2c_mutex = mutex_id;
 
-    // 2. Делаем программный сброс (чистим Control1 и Status)
-    if (AM1805_SoftwareReset() != AM1805_OK) {
-        return false;
-    }
-
-    // 3. Запускаем жесткую инициализацию с проверкой пароля
+    if (AM1805_SoftwareReset() != AM1805_OK) return false;
     return AM1805_ForceInit(hi2c_ptr, mutex_id, 0x55AA3C0F);
 }
 
-
-
-/**
- * @brief Настройка калибровки по реальному уходу времени (Алгоритм из Datasheet).
- * @param drift_sec_per_hour Уход часов в секундах за 1 час.
- * (+) часы спешат (нужно замедлять, применяется XTCAL и OFFSETX < 0).
- * (-) часы отстают (нужно ускорять, применяется OFFSETX > 0).
- * @return AM1805_Status AM1805_OK при успешной записи по I2C.
- */
 AM1805_Status AM1805_SetCalibrationByDrift(float drift_sec_per_hour) {
-
-    // 1. Рассчитываем текущую ошибку в PPM (миллионных долях)
-    // В 1 часе 3600 секунд. Умножаем на 1 000 000 для получения PPM.
     float ppm_error = (drift_sec_per_hour / 3600.0f) * 1000000.0f;
-
-    // Нам нужна КОМПЕНСАЦИЯ. Если часы спешат (+), коррекция должна быть с минусом.
     float padj = -ppm_error;
+    int16_t adj = (int16_t)(padj / 1.90735f);
 
-    // 2. Переводим PPM в абстрактные шаги калибровки.
-    // По Datasheet (раздел 5.9.1) 1 базовый шаг равен 1.90735 ppm.
-    float adj_f = padj / 1.90735f;
-    int16_t adj = (int16_t)adj_f;
-
-    uint8_t xtcal = 0;
-    uint8_t cmdx = 0;
+    uint8_t xtcal = 0, cmdx = 0;
     int8_t offsetx = 0;
 
-    // 3. Распределение по алгоритму Ambiq Micro (шаги 8-14 из даташита)
     if (adj < -320) {
-        // ОШИБКА ОГРОМНАЯ: Часы спешат слишком сильно.
-        // Применяем максимальный аппаратный "ручной тормоз".
-        xtcal = 3;
-        cmdx = 1;
-        offsetx = -64; // Эквивалент максимально возможного замедления
-    }
-    else if (adj < -256) {
+        xtcal = 3; cmdx = 1; offsetx = -64;
+    } else if (adj < -256) {
         xtcal = 3; cmdx = 1; offsetx = (adj + 192) / 2;
-    }
-    else if (adj < -192) {
+    } else if (adj < -192) {
         xtcal = 3; cmdx = 0; offsetx = adj + 192;
-    }
-    else if (adj < -128) {
+    } else if (adj < -128) {
         xtcal = 2; cmdx = 0; offsetx = adj + 128;
-    }
-    else if (adj < -64) {
+    } else if (adj < -64) {
         xtcal = 1; cmdx = 0; offsetx = adj + 64;
-    }
-    else if (adj < 64) {
+    } else if (adj < 64) {
         xtcal = 0; cmdx = 0; offsetx = adj;
-    }
-    else if (adj < 128) {
+    } else if (adj < 128) {
         xtcal = 0; cmdx = 1; offsetx = adj / 2;
-    }
-    else {
-        // ОШИБКА ОГРОМНАЯ: Часы сильно отстают (Adj >= 128).
-        // XTCAL не умеет ускорять, поэтому выкручиваем обычную калибровку на максимум.
-        xtcal = 0;
-        cmdx = 1;
-        offsetx = 63; // Эквивалент максимально возможного ускорения
+    } else {
+        xtcal = 0; cmdx = 1; offsetx = 63;
     }
 
     AM1805_Status status;
-
-    // --- 4. Запись в регистр 0x1D (Oscillator Status - для XTCAL) ---
     uint8_t reg_1d = 0;
-    // Читаем текущее состояние 0x1D, чтобы не затереть флаги ошибок (OF, ACF и др.)
+
     status = i2c_transfer(0x1D, &reg_1d, 1, true);
     if (status != AM1805_OK) return status;
 
-    reg_1d &= 0x3F;         // Очищаем старшие 2 бита (7:6)
-    reg_1d |= (xtcal << 6); // Вписываем наше значение XTCAL
-
+    reg_1d = (reg_1d & 0x3F) | (xtcal << 6);
     status = i2c_transfer(0x1D, &reg_1d, 1, false);
     if (status != AM1805_OK) return status;
 
-    // --- 5. Запись в регистр 0x14 (Calibration XT - для CMDX и OFFSETX) ---
-    // Упаковываем число от -64 до +63 в 7 бит (формат Two's complement)
     uint8_t reg_14 = (uint8_t)(offsetx & 0x7F);
+    if (cmdx == 1) reg_14 |= 0x80;
 
-    if (cmdx == 1) {
-        reg_14 |= 0x80; // Ставим 7-й бит (CMDX)
-    }
-
-    // Пишем в регистр 0x14. Ключ 0x1F (Configuration Key) для этого регистра НЕ НУЖЕН!
     return i2c_transfer(AM1805_REG_CAL_XT, &reg_14, 1, false);
 }
 
-/**
- * @brief Форматирование времени в строку.
- */
 void AM1805_FormatFullDateTime(char* buf, uint16_t len, AM1805_Time_t* time) {
     if (!buf || !time) return;
     snprintf(buf, len, "%04u-%02u-%02u %02u:%02u:%02u [%s]",
