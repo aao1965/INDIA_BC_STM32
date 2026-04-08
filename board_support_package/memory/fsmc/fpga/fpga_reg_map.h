@@ -43,25 +43,20 @@
  */
 #define FPGA_DEV_IC_ID           2
 
-// Register Offsets
-#define REG_IC_PENDING_OFF       0x00  // R: Pending interrupts (CLEAR-ON-READ)
+// Register Offsets (Updated for W1C architecture, RAW register removed)
+#define REG_IC_PENDING_OFF       0x00  // R/W: Pending interrupts (Write-1-to-Clear)
 #define REG_IC_MASK_OFF          0x01  // R/W: Mask (1 = Interrupt enabled)
-#define REG_IC_RAW_OFF           0x02  // R: Current raw state of input pins
-#define REG_IC_EDGE_SEL_OFF      0x03  // R/W: 0 = Rising Edge, 1 = Falling Edge
-#define REG_IC_CTRL_OFF          0x04  // R/W: Pulse Stretcher Control
+#define REG_IC_EDGE_SEL_OFF      0x02  // R/W: 0 = Rising Edge, 1 = Falling Edge
+#define REG_IC_CTRL_OFF          0x03  // R/W: Control Register
 
 // Absolute Addresses
 #define ADDR_IC_PENDING          FPGA_ADDR(FPGA_DEV_IC_ID, REG_IC_PENDING_OFF)
 #define ADDR_IC_MASK             FPGA_ADDR(FPGA_DEV_IC_ID, REG_IC_MASK_OFF)
-#define ADDR_IC_RAW              FPGA_ADDR(FPGA_DEV_IC_ID, REG_IC_RAW_OFF)
 #define ADDR_IC_EDGE_SEL         FPGA_ADDR(FPGA_DEV_IC_ID, REG_IC_EDGE_SEL_OFF)
 #define ADDR_IC_CTRL             FPGA_ADDR(FPGA_DEV_IC_ID, REG_IC_CTRL_OFF)
 
-// --- Битовые поля для регистра CTRL ---
+// --- Bitfields for CTRL Register ---
 #define FPGA_IC_CTRL_GLOBAL_EN   (1 << 0)  // Bit 0: 1 = Global Interrupt Output Enabled
-#define FPGA_IC_CTRL_PULSE_MODE  (1 << 1)  // Bit 1: 1 = Pulse Mode, 0 = Level Mode
-#define FPGA_IC_CTRL_WIDTH_POS   8         // Bits [11:8]: Pulse Width Multiplier
-#define FPGA_IC_CTRL_PULSE_WIDTH(x) (((x) & 0x0F) << FPGA_IC_CTRL_WIDTH_POS)
 
 // Interrupt Vector Bitmasks
 #define FPGA_IRQ_TICK_1KHZ       (1 << 0)  // Bit 0: 1 kHz System Tick

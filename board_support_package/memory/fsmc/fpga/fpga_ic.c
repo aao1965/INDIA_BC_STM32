@@ -19,12 +19,9 @@ SemaphoreHandle_t xFpgaIrqSemaphore;
 FSMC_Status_t fpga_ic_init_hw(void)
 {
     FSMC_Status_t status;
-    uint16_t dummy_read;
 
-    // 1. Configure Pulse Stretcher: Width = 10 clocks (100ns), Pulse Mode = 1, GLOBAL EN = 0!
-    uint16_t ctrl_config = FPGA_IC_CTRL_PULSE_WIDTH(10) | FPGA_IC_CTRL_PULSE_MODE;
-
-    status = fpga_write(ADDR_IC_CTRL, ctrl_config);
+    // 1. Ensure global interrupts are disabled initially (no stretcher config needed)
+    status = fpga_write(ADDR_IC_CTRL, 0x0000);
     if (status != FSMC_OK) return status;
 
     // 2. Mask (disable) all individual interrupts
@@ -35,8 +32,8 @@ FSMC_Status_t fpga_ic_init_hw(void)
     status = fpga_write(ADDR_IC_EDGE_SEL, 0x0000);
     if (status != FSMC_OK) return status;
 
-    // 4. Clear any garbage pending flags (Clear-on-Read dummy read)
-    status = fpga_read(ADDR_IC_PENDING, &dummy_read);
+    // 4. Clear any garbage pending flags by writing 1s (Write-1-to-Clear)
+    status = fpga_write(ADDR_IC_PENDING, 0xFFFF);
 
     return status;
 }
@@ -62,8 +59,14 @@ FSMC_Status_t fpga_ic_disable_irq(uint16_t irq_mask)
 
 FSMC_Status_t fpga_ic_get_pending(uint16_t *p_pending)
 {
-    // A single read fetches the status AND clears it inside the FPGA
+    // Passive read of pending flags
     return fpga_read(ADDR_IC_PENDING, p_pending);
+}
+
+FSMC_Status_t fpga_ic_clear_pending(uint16_t processed_flags)
+{
+    // Write back processed flags to clear them (Write-1-to-Clear)
+    return fpga_write(ADDR_IC_PENDING, processed_flags);
 }
 
 /* ========================================================================== */
@@ -109,7 +112,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     }
 }
 
-uint32_t cnt_1kHz_interrupt=0;
+uint32_t cnt_1kHz_interrupt = 0;
 
 // FreeRTOS Task for processing FPGA events
 void vFpgaIrqTask(void *pvParameters)
@@ -120,20 +123,20 @@ void vFpgaIrqTask(void *pvParameters)
         // Sleep until the FPGA pulls the interrupt line
         if (xSemaphoreTake(xFpgaIrqSemaphore, portMAX_DELAY) == pdTRUE) {
 
-            // ONE READ DOES IT ALL:
-            // 1. We get the status of all IRQ lines.
-            // 2. The FPGA automatically clears the pending bits (Clear-on-Read).
-            if (fpga_ic_get_pending(&pending_flags) == FSMC_OK) {
+            // READ LOOP: Keep reading until all flags are cleared (W1C logic).
+            // This prevents missing an interrupt if it fires right after we read the register.
+            while (fpga_ic_get_pending(&pending_flags) == FSMC_OK && pending_flags != 0) {
 
-                // If it's the 1 kHz timer tick
+                // 1. Process active flags
                 if (pending_flags & FPGA_IRQ_TICK_1KHZ) {
-                    // TODO: Perform useful work
-                	cnt_1kHz_interrupt++;
-
+                    cnt_1kHz_interrupt++;
                 }
 
                 // Place for future UART processing:
                 // if (pending_flags & FPGA_IRQ_UART_EVENT) { ... }
+
+                // 2. Explicitly clear only the flags we just processed
+                fpga_ic_clear_pending(pending_flags);
             }
         }
     }

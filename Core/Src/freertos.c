@@ -298,7 +298,7 @@ void StartTerminalTask(void *argument)
 
 
 		fpga_set_bit(ADDR_DEBUG_MISC, B0);
-		delay_us(30);
+		delay_us(20);
 		fpga_clr_bit(ADDR_DEBUG_MISC, B0);
 
 

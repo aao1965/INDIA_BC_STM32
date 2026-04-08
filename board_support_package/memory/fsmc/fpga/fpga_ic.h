@@ -10,7 +10,7 @@
 
 /**
  * @brief Initializes the FPGA Interrupt Controller hardware.
- * Configures the Pulse Stretcher, masks all interrupts, clears pending flags,
+ * Configures basic registers, masks all interrupts, clears pending flags via W1C,
  * and KEEPS GLOBAL INTERRUPT DISABLED.
  * @return FSMC_Status_t Status of the FSMC bus operations.
  */
@@ -38,11 +38,18 @@ FSMC_Status_t fpga_ic_enable_irq(uint16_t irq_mask);
 FSMC_Status_t fpga_ic_disable_irq(uint16_t irq_mask);
 
 /**
- * @brief Reads pending interrupts. Hardware AUTOMATICALLY CLEARS them on read (Clear-on-Read).
+ * @brief Reads pending interrupts. Hardware DOES NOT clear them automatically anymore!
  * @param p_pending Pointer to store the pending interrupt bitmask.
  * @return FSMC_Status_t Status of the FSMC read operation.
  */
 FSMC_Status_t fpga_ic_get_pending(uint16_t *p_pending);
+
+/**
+ * @brief Clears pending interrupts using Write-1-to-Clear logic.
+ * @param processed_flags Bitmask of the interrupts that have been processed and should be cleared.
+ * @return FSMC_Status_t Status of the FSMC write operation.
+ */
+FSMC_Status_t fpga_ic_clear_pending(uint16_t processed_flags);
 
 /* ========================================================================== */
 /* FreeRTOS Integration                                                       */
