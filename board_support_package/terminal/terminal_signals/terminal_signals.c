@@ -73,7 +73,8 @@ SIGNALS_BEGIN(DSPA_SIGNALS_NAME)
 			_BOOL_R_("status test", status_fm22l16_test, &sFM22L16),
 			_BOOL_RW_("full test(all data will be destroyed)", run_fm22l16_full_test, &sFM22L16),
 		_FLOAT_R_("ds1621s+(°C) ", current_temp, &sDEBUG),
-		_U16_R_("fsmc cnt ", test_fpga, &sDEBUG),
+		//_U16_R_("fsmc cnt ", test_fpga, &sDEBUG),
+		_BYTE_R_("spi bridge cnt ", test_fpga, &sDEBUG),
 		_U32_R_("1 kHz interrupt", cnt_1kHz_interrupt, &sDEBUG)
 
 SIGNALS_END(DSPA_SIGNALS_NAME)

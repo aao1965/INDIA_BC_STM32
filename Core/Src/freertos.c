@@ -185,7 +185,7 @@ uint16_t test_fpga=0;
 /* USER CODE END Header_StartLowLevelTask */
 void StartLowLevelTask(void *argument)
 {
-    /* USER CODE BEGIN StartLowLevelTask */
+  /* USER CODE BEGIN StartLowLevelTask */
 
 	for (;;) {
 		// 4. Update current temperature
@@ -199,84 +199,8 @@ void StartLowLevelTask(void *argument)
 		fpga_tgl_bit(66, 2);
 		osDelay(500);
 	}
-	/* USER CODE END StartLowLevelTask */
+  /* USER CODE END StartLowLevelTask */
 }
-
-
-
-typedef struct __attribute__((packed)) {
-    uint8_t sec;
-    uint8_t min;
-    uint8_t hour;
-    uint8_t day;
-    uint8_t month;
-    uint8_t year;   // Мы договорились, что тут храним 26, а не 2026
-    float temp;
-} LogItem_t; // Теперь размер СТРОГО 10 байт
-
-
-/*
-void StartLowLevelTask(void *argument)
-{
-   USER CODE BEGIN StartLowLevelTask
-    LogItem_t item;
-    // Адрес начала блока самописца (из fram_recorder.h)
-    uint32_t write_ptr = FRAM_RECORDER_START_ADDRESS;
-    uint32_t start_time = osKernelGetTickCount();
-    const uint32_t duration = 5 * 60 * 1000; // 5 минут теста
-    bool is_recording = true;
-
-    // Очистка 8 Кб памяти нулями перед тестом
-    if (fsmc_lock() == FSMC_OK) {
-        uint16_t zero = 0;
-        for (uint32_t i = 0; i < 4096; i++) { // 4096 слов по 16 бит = 8 Кб
-            fsmc_write_buffer(FSMC_DEV_FRAM, FRAM_RECORDER_START_ADDRESS + i, &zero, 1);
-        }
-        fsmc_unlock();
-    }
-
-    for (;;) {
-        // Читаем датчик температуры
-        current_temp = DS1621_GetLastTemperature();
-
-        // Читаем RTC AM1805
-        if (AM1805_GetTime(&current_time) == AM1805_OK) {
-
-            if (is_recording) {
-            	item.sec   = current_time.seconds;
-            	item.min   = current_time.minutes;
-            	item.hour  = current_time.hours;
-            	item.day   = current_time.day;
-            	item.month = current_time.month;
-            	// Важно: записываем только последние 2 цифры года!
-            	item.year  = (uint8_t)(current_time.year % 100);
-            	item.temp  = current_temp;
-                // Записываем 10 байт (5 слов по 16 бит) во FRAM
-                if (fsmc_lock() == FSMC_OK) {
-                    fsmc_write_buffer(FSMC_DEV_FRAM, write_ptr, (uint16_t*)&item, 5);
-                    fsmc_unlock();
-
-                    write_ptr += 5; // Сдвигаем словный адрес
-                }
-
-                // Условие остановки: 5 минут или конец памяти
-                if ((osKernelGetTickCount() - start_time) >= duration ||
-                    (write_ptr + 5 > FRAM_RECORDER_END_ADDRESS)) {
-                    is_recording = false;
-                }
-            }
-
-            // Вывод строки времени в терминал (как и было)
-            AM1805_FormatFullDateTime(time_str, sizeof(time_str), &current_time);
-        }
-
-        fpga_tgl_bit(66, 2);
-        osDelay(500); // Пишем каждые полсекунды
-    }
-   USER CODE END StartLowLevelTask
-}
-*/
-
 
 /* USER CODE BEGIN Header_StartTerminalTask */
 /**
@@ -306,14 +230,14 @@ void StartTerminalTask(void *argument)
 		test_fpga++;
 		fpga_write(ADDR_DEBUG_FEEDBACK, test_fpga);*/
 		SPI_FPGA_Read(ADDR_S_DEBUG_FEEDBACK, &test_fpga);
-		test_fpga+=256;
+		test_fpga+=1;
 		SPI_FPGA_Write(ADDR_S_DEBUG_FEEDBACK, test_fpga);
 
 		static bool f;
 		if (f){
 
 			fpga_pwm_set_duty(pwm);
-			pwm+=16;
+			pwm+=4;
 			if (pwm==10000)pwm=0;
 		}
 		f=!f;
